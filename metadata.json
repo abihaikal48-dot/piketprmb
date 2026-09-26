@@ -1,0 +1,10 @@
+{
+  "name": "Hara Chicken Piket Kru & QR Verification",
+  "description": "Sistem piket kru Hara Chicken berbasis scan QR area, verifikasi kebersihan otomatis AI, dan sinkronisasi Google Sheets untuk SPV.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
