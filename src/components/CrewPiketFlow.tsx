@@ -155,21 +155,21 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({
       const data = await response.json();
       setAiResult(data);
     } catch (err) {
-      console.warn('AI fallback:', err);
+      console.warn('AI verification connection error:', err);
       setAiResult({
-        status: 'BERSIH_SESUAI_STANDAR',
-        isCorrectArea: true,
-        detectedAreaDescription: `Area ${selectedArea.name}.`,
-        summary: `Area ${selectedArea.name} tampak rapi dan memenuhi standar kebersihan outlet.`,
+        status: 'PERLU_TINDAKLANJUT',
+        isCorrectArea: false,
+        detectedAreaDescription: 'Koneksi ke backend verifikasi AI gagal.',
+        summary: 'Gagal menghubungkan ke server verifikasi AI. Pastikan variabel GEMINI_API_KEY sudah diset di Vercel (Project Settings > Environment Variables).',
         findings: [
-          'Permukaan utama telah diseka dan bebas kotoran',
-          'Peralatan kerja tersusun pada posisi semestinya',
-          'Lantai bersih dan kering'
+          'Endpoint /api/verify-cleaning tidak memberikan respon valid',
+          'Pastikan deployment di Vercel memiliki environment variable GEMINI_API_KEY',
+          'Laporan tetap dapat disimpan untuk ditinjau secara langsung oleh SPV'
         ],
         checkItems: selectedArea.standardChecklist.map(c => ({
           item: c,
-          isClean: true,
-          notes: 'Memenuhi standar'
+          isClean: false,
+          notes: 'Belum terverifikasi AI'
         })),
         verifiedAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
       });
@@ -185,12 +185,12 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({
     setIsSubmitting(true);
     try {
       const finalAiResult = aiResult || {
-        status: 'BERSIH_SESUAI_STANDAR',
-        isCorrectArea: true,
+        status: 'PERLU_TINDAKLANJUT',
+        isCorrectArea: false,
         detectedAreaDescription: `Area ${selectedArea.name}.`,
-        summary: `Piket dilaporkan oleh ${selectedCrewName}.`,
-        findings: ['Foto bukti telah disimpan'],
-        checkItems: selectedArea.standardChecklist.map(c => ({ item: c, isClean: true, notes: 'Tercatat' })),
+        summary: `Piket dilaporkan langsung oleh ${selectedCrewName} tanpa verifikasi AI.`,
+        findings: ['Foto bukti telah disimpan, menunggu konfirmasi inspeksi SPV'],
+        checkItems: selectedArea.standardChecklist.map(c => ({ item: c, isClean: false, notes: 'Menunggu SPV' })),
         verifiedAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
       };
 
