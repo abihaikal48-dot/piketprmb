@@ -1,30 +1,22 @@
 import React from 'react';
-import {
-  QrCode,
-  BarChart3,
-  ClipboardList,
-  Printer,
-  Clock,
-  Sheet,
-  ArrowLeft,
-  ShieldCheck,
-  Smartphone
-} from 'lucide-react';
+import { QrCode, ClipboardList, BarChart3, Printer, Clock, FileSpreadsheet, Lock, Unlock, Check } from 'lucide-react';
 import { usePiket } from '../context/PiketContext';
 import { ShiftType } from '../types/piket';
 
 interface NavbarProps {
-  currentView: 'crew' | 'spv';
-  setCurrentView: (view: 'crew' | 'spv') => void;
-  spvTab: 'dashboard' | 'roster' | 'stickers';
-  setSpvTab: (tab: 'dashboard' | 'roster' | 'stickers') => void;
+  activeTab: 'scan' | 'roster' | 'dashboard' | 'stickers';
+  setActiveTab: (tab: 'scan' | 'roster' | 'dashboard' | 'stickers') => void;
+  isSPVUnlocked: boolean;
+  onRequestSPVAccess: () => void;
+  onLockSPV: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
-  currentView,
-  setCurrentView,
-  spvTab,
-  setSpvTab,
+  activeTab,
+  setActiveTab,
+  isSPVUnlocked,
+  onRequestSPVAccess,
+  onLockSPV
 }) => {
   const { activeShift, setActiveShift, isSheetsConnected, spreadsheetInfo } = usePiket();
 
@@ -36,117 +28,140 @@ export const Navbar: React.FC<NavbarProps> = ({
     setActiveShift(nextShift);
   };
 
+  const handleTabClick = (tab: 'scan' | 'roster' | 'dashboard' | 'stickers') => {
+    if ((tab === 'dashboard' || tab === 'roster') && !isSPVUnlocked) {
+      onRequestSPVAccess();
+      return;
+    }
+    setActiveTab(tab);
+  };
+
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-2xs no-print">
-      <div className="max-w-6xl mx-auto px-3 sm:px-6">
-        <div className="flex items-center justify-between h-14 sm:h-16">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+        <div className="flex items-center justify-between h-14">
           {/* Brand Logo & Name */}
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-red-600 flex items-center justify-center text-white shadow-xs font-black text-lg">
-              🍗
+          <div
+            onClick={() => setActiveTab('scan')}
+            className="flex items-center gap-2.5 cursor-pointer"
+          >
+            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white font-bold text-sm tracking-tight">
+              PC
             </div>
             <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-base sm:text-lg text-slate-900 tracking-tight">
-                  Piket Cihuy
-                </span>
-                <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.2 rounded-md uppercase">
-                  {currentView === 'crew' ? 'Portal Kru' : 'Portal SPV'}
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-base text-slate-900 tracking-tight">Piket Cihuy</span>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                  Outlet
                 </span>
               </div>
-              <p className="text-[10px] text-slate-500 hidden sm:block">
-                Piket QR Code, AI Vision & Google Sheets
-              </p>
             </div>
           </div>
 
-          {/* Quick Actions & View Switcher */}
+          {/* Quick Controls: Shift & SPV Lock Button */}
           <div className="flex items-center gap-2">
             {/* Shift Pill */}
             <button
               onClick={toggleShift}
-              title="Ganti Shift"
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+              title="Klik untuk ganti shift aktif"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors border border-slate-200"
             >
-              <Clock className="w-3.5 h-3.5 text-amber-600" />
-              <span>{activeShift.split(' ')[0]}</span>
+              <Clock className="w-3.5 h-3.5 text-slate-500" />
+              <span className="hidden sm:inline">Shift:</span>
+              <span className="text-slate-900 font-bold">{activeShift.split(' ')[0]}</span>
             </button>
 
-            {/* Sheets Indicator Pill */}
-            {isSheetsConnected && spreadsheetInfo && (
+            {/* Sheets Status Pill */}
+            {isSheetsConnected && spreadsheetInfo ? (
               <a
                 href={spreadsheetInfo.url}
                 target="_blank"
                 rel="noreferrer"
-                title="Google Spreadsheet Terhubung"
-                className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                title="Buka Google Spreadsheet"
               >
-                <Sheet className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Sheets ON</span>
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="hidden md:inline">Sheets Terhubung</span>
+                <span className="md:hidden">Sheets</span>
               </a>
-            )}
+            ) : null}
 
-            {/* Big Switcher Button: Mode Kru <-> Mode SPV */}
-            {currentView === 'crew' ? (
+            {/* SPV Lock Status Toggle */}
+            {isSPVUnlocked ? (
               <button
-                onClick={() => setCurrentView('spv')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-xs transition-all active:scale-95"
+                onClick={onLockSPV}
+                title="Klik untuk mengunci kembali akses SPV"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors"
               >
-                <BarChart3 className="w-3.5 h-3.5 text-amber-400" />
-                <span>Dashboard SPV</span>
+                <Unlock className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="hidden sm:inline">SPV Terbuka</span>
+                <span className="text-[10px] text-slate-400 font-normal ml-0.5">(Kunci)</span>
               </button>
             ) : (
               <button
-                onClick={() => setCurrentView('crew')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-xs transition-all active:scale-95"
+                onClick={onRequestSPVAccess}
+                title="Buka akses Dashboard SPV dengan PIN"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-colors"
               >
-                <Smartphone className="w-3.5 h-3.5" />
-                <span>Halaman Kru (Scan QR)</span>
+                <Lock className="w-3.5 h-3.5 text-slate-300" />
+                <span>SPV</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* Sub-bar ONLY in SPV Portal */}
-        {currentView === 'spv' && (
-          <div className="flex space-x-1 border-t border-slate-100 py-1.5 overflow-x-auto scrollbar-none">
-            <button
-              onClick={() => setSpvTab('dashboard')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                spvTab === 'dashboard'
-                  ? 'bg-slate-900 text-white shadow-2xs'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <BarChart3 className="w-3.5 h-3.5" />
-              <span>Monitoring & Sheets</span>
-            </button>
+        {/* Tab Navigation */}
+        <div className="flex space-x-1 border-t border-slate-100 py-1.5 overflow-x-auto scrollbar-none text-xs">
+          <button
+            onClick={() => setActiveTab('scan')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap ${
+              activeTab === 'scan'
+                ? 'bg-slate-900 text-white'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <QrCode className="w-3.5 h-3.5" />
+            <span>Kirim Piket</span>
+          </button>
 
-            <button
-              onClick={() => setSpvTab('roster')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                spvTab === 'roster'
-                  ? 'bg-slate-900 text-white shadow-2xs'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <ClipboardList className="w-3.5 h-3.5" />
-              <span>Buat Jadwal Piket</span>
-            </button>
+          <button
+            onClick={() => handleTabClick('dashboard')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap ${
+              activeTab === 'dashboard'
+                ? 'bg-slate-900 text-white'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5" />
+            <span>Dashboard SPV</span>
+            {!isSPVUnlocked && <Lock className="w-3 h-3 text-slate-400 ml-0.5" />}
+          </button>
 
-            <button
-              onClick={() => setSpvTab('stickers')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                spvTab === 'stickers'
-                  ? 'bg-slate-900 text-white shadow-2xs'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Cetak Stiker QR</span>
-            </button>
-          </div>
-        )}
+          <button
+            onClick={() => handleTabClick('roster')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap ${
+              activeTab === 'roster'
+                ? 'bg-slate-900 text-white'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <ClipboardList className="w-3.5 h-3.5" />
+            <span>Jadwal Piket</span>
+            {!isSPVUnlocked && <Lock className="w-3 h-3 text-slate-400 ml-0.5" />}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('stickers')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap ${
+              activeTab === 'stickers'
+                ? 'bg-slate-900 text-white'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Cetak Stiker QR</span>
+          </button>
+        </div>
       </div>
     </header>
   );

@@ -13,18 +13,21 @@ import {
   FileSpreadsheet,
   Download,
   Eye,
-  Link,
-  Code2,
-  Copy,
-  Info,
-  ShieldCheck,
-  Sparkles
+  Shield,
+  Sparkles,
+  Lock,
+  Link as LinkIcon
 } from 'lucide-react';
 import { usePiket } from '../context/PiketContext';
 import { PiketRecord } from '../types/piket';
 import { signInWithGoogle } from '../services/authService';
+import { AreaIcon } from './AreaIcon';
 
-export const SPVDashboard: React.FC = () => {
+interface SPVDashboardProps {
+  onLockSPV?: () => void;
+}
+
+export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
   const {
     areas,
     records,
@@ -33,11 +36,11 @@ export const SPVDashboard: React.FC = () => {
     isSheetsConnected,
     googleUserEmail,
     connectGoogleSpreadsheet,
-    connectWebhookSpreadsheet,
     disconnectGoogleSpreadsheet,
     updateRecordSPVStatus,
     syncRecordToGoogleSheets,
-    syncAllPendingToSheets
+    syncAllPendingToSheets,
+    connectWebhookSpreadsheet
   } = usePiket();
 
   const [filterShift, setFilterShift] = useState<string>('all');
@@ -49,14 +52,10 @@ export const SPVDashboard: React.FC = () => {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
-
-  // Webhook setup modal / form for Vercel
   const [showWebhookSetup, setShowWebhookSetup] = useState(false);
-  const [webhookInputUrl, setWebhookInputUrl] = useState(spreadsheetInfo?.webhookUrl || '');
-  const [sheetUrlInput, setSheetUrlInput] = useState(spreadsheetInfo?.url || '');
-  const [copiedScript, setCopiedScript] = useState(false);
-  const [oauthErrorNotice, setOauthErrorNotice] = useState<string | null>(null);
+  const [webhookUrlInput, setWebhookUrlInput] = useState('');
 
+  // Statistics calculation for current active shift
   const today = new Date().toISOString().split('T')[0];
   const todayShiftRecords = records.filter(r => r.date === today && r.shift === activeShift);
 
@@ -76,6 +75,7 @@ export const SPVDashboard: React.FC = () => {
 
   const unsyncedCount = records.filter(r => !r.syncedToSheets).length;
 
+  // Filter records
   const filteredRecords = records.filter(record => {
     if (filterShift !== 'all' && record.shift !== filterShift) return false;
     if (filterArea !== 'all' && record.areaId !== filterArea) return false;
@@ -89,18 +89,16 @@ export const SPVDashboard: React.FC = () => {
     return true;
   });
 
-  const handleGoogleOAuthConnect = async () => {
-    setOauthErrorNotice(null);
+  const handleGoogleConnect = async () => {
     try {
       setIsSigningIn(true);
       const { user, accessToken } = await signInWithGoogle();
       const info = await connectGoogleSpreadsheet(accessToken, user.email || 'Akun Google');
-      setSyncToast(`Google Spreadsheet terhubung: ${info.title}`);
-      setTimeout(() => setSyncToast(null), 4000);
+      setSyncToast(`Google Sheets terhubung: ${info.title}`);
+      setTimeout(() => setSyncToast(null), 3000);
     } catch (err: any) {
-      console.error('Sign in Google error:', err);
-      setOauthErrorNotice(err.message || 'Gagal login Google.');
-      // Auto suggest webhook on Vercel
+      console.warn('Google connect error:', err);
+      // If Vercel domain unauthorized error, guide to simple webhook
       setShowWebhookSetup(true);
     } finally {
       setIsSigningIn(false);
@@ -109,62 +107,23 @@ export const SPVDashboard: React.FC = () => {
 
   const handleSaveWebhook = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!webhookInputUrl.trim()) return;
-
-    connectWebhookSpreadsheet(webhookInputUrl.trim(), sheetUrlInput.trim(), 'Piket Cihuy - Google Sheets');
+    if (!webhookUrlInput.trim()) return;
+    connectWebhookSpreadsheet(webhookUrlInput.trim());
     setShowWebhookSetup(false);
-    setSyncToast('Google Sheets Webhook berhasil dihubungkan!');
-    setTimeout(() => setSyncToast(null), 3500);
-  };
-
-  const sampleAppsScriptCode = `function doPost(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow(["Waktu", "Nama Kru", "Shift", "Area", "Kode", "Status AI", "Ringkasan AI", "Temuan Detail", "Status SPV", "Catatan SPV", "ID"]);
-  }
-  var data = JSON.parse(e.postData.contents);
-  sheet.appendRow([
-    data.timestamp,
-    data.crewName,
-    data.shift,
-    data.areaName,
-    data.areaCode,
-    data.aiStatus,
-    data.aiSummary,
-    data.aiFindings,
-    data.spvStatus,
-    data.spvNotes,
-    data.id
-  ]);
-  return ContentService.createTextOutput("OK").setMimeType(ContentService.MimeType.TEXT);
-}`;
-
-  const copyScriptToClipboard = () => {
-    navigator.clipboard.writeText(sampleAppsScriptCode);
-    setCopiedScript(true);
-    setTimeout(() => setCopiedScript(false), 2500);
+    setSyncToast('Google Sheets Webhook berhasil tersimpan!');
+    setTimeout(() => setSyncToast(null), 3000);
   };
 
   const handleSyncAll = async () => {
     setIsSyncingAll(true);
     try {
       const count = await syncAllPendingToSheets();
-      setSyncToast(`Tersinkron ${count} laporan ke Google Sheets!`);
-      setTimeout(() => setSyncToast(null), 3500);
+      setSyncToast(`Berhasil menyinkronkan ${count} laporan!`);
+      setTimeout(() => setSyncToast(null), 3000);
     } catch (err) {
       console.error('Sync all error:', err);
     } finally {
       setIsSyncingAll(false);
-    }
-  };
-
-  const handleSyncSingle = async (recordId: string) => {
-    const success = await syncRecordToGoogleSheets(recordId);
-    if (success) {
-      setSyncToast('Laporan berhasil disinkronkan ke Google Sheets');
-      setTimeout(() => setSyncToast(null), 2500);
-    } else {
-      setShowWebhookSetup(true);
     }
   };
 
@@ -185,15 +144,15 @@ export const SPVDashboard: React.FC = () => {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Piket_Cihuy_${today}.csv`);
+    link.setAttribute('download', `Piket_Cihuy_Log_${today}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-3.5 sm:px-6 py-4 sm:py-6 space-y-5">
-      {/* Toast Alert */}
+    <div className="max-w-5xl mx-auto px-4 py-5 sm:py-6 space-y-5">
+      {/* Toast Notification */}
       {syncToast && (
         <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-lg border border-slate-700 flex items-center gap-2 text-xs font-semibold">
           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -201,121 +160,115 @@ export const SPVDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
         <div>
-          <span className="text-[10px] font-extrabold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-md uppercase tracking-wider">
-            Portal Pengawas & SPV
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            Portal SPV & Kepala Outlet
           </span>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-1">
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight mt-0.5">
             Monitoring Piket Cihuy
           </h1>
-          <p className="text-xs text-slate-500">
-            Rekap kebersihan shift {activeShift.split(' ')[0]}, persetujuan laporan, dan database Google Sheets.
+          <p className="text-xs text-slate-500 mt-0.5">
+            Pantau kepatuhan piket kru, verifikasi visual AI, dan database spreadsheet.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          {onLockSPV && (
+            <button
+              onClick={onLockSPV}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-xs transition-colors"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Kunci Akses</span>
+            </button>
+          )}
+
           <button
             onClick={exportCSV}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-2xs"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-2xs transition-colors"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-3.5 h-3.5 text-slate-500" />
             <span>Ekspor CSV</span>
           </button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs">
-          <span className="text-[11px] font-bold text-slate-500 uppercase">Kepatuhan Shift</span>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-900">{progressPercent}%</span>
-            <span className="text-[11px] text-slate-500 font-semibold">
-              ({completedCleanCount}/{totalAreas})
-            </span>
+      {/* Quick Summary Cards (Simple & lightweight) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+          <span className="text-[11px] font-semibold text-slate-500">Kepatuhan Shift</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold text-slate-900">{progressPercent}%</span>
+            <span className="text-[11px] text-slate-500">({completedCleanCount}/{totalAreas})</span>
           </div>
           <div className="w-full bg-slate-100 rounded-full h-1.5 mt-2 overflow-hidden">
-            <div className="bg-red-600 h-1.5 rounded-full" style={{ width: `${progressPercent}%` }} />
+            <div className="bg-slate-900 h-1.5 rounded-full" style={{ width: `${progressPercent}%` }} />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs">
-          <span className="text-[11px] font-bold text-emerald-700 uppercase">Bersih Standar</span>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-emerald-700">{completedCleanCount}</span>
-            <span className="text-[11px] text-slate-400">Area lolos</span>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+          <span className="text-[11px] font-semibold text-slate-500">Bersih Standar</span>
+          <div className="mt-1">
+            <span className="text-2xl font-bold text-emerald-600">{completedCleanCount}</span>
+            <span className="text-[11px] text-slate-500 ml-1">Area</span>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs">
-          <span className="text-[11px] font-bold text-amber-700 uppercase">Perlu Tindak Lanjut</span>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-amber-700">{needAttentionCount}</span>
-            <span className="text-[11px] text-slate-400">Ada catatan</span>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+          <span className="text-[11px] font-semibold text-slate-500">Perlu Revisi</span>
+          <div className="mt-1">
+            <span className="text-2xl font-bold text-amber-600">{needAttentionCount}</span>
+            <span className="text-[11px] text-slate-500 ml-1">Area</span>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs">
-          <span className="text-[11px] font-bold text-slate-500 uppercase">Belum Piket</span>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-700">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+          <span className="text-[11px] font-semibold text-slate-500">Belum Piket</span>
+          <div className="mt-1">
+            <span className="text-2xl font-bold text-slate-700">
               {Math.max(0, totalAreas - todayShiftRecords.length)}
             </span>
-            <span className="text-[11px] text-slate-400">Titik QR</span>
+            <span className="text-[11px] text-slate-500 ml-1">Area</span>
           </div>
         </div>
       </div>
 
-      {/* GOOGLE SHEETS CONNECTION BOX (OPTIMIZED FOR VERCEL & SPREADSHEETS) */}
-      <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 rounded-2xl p-4 sm:p-5 text-white shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1 max-w-xl">
+      {/* Google Sheets Connection Card (Clean & Simple) */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-300">
-              Database Google Sheets
-            </span>
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-sm font-bold text-slate-900">
+              {isSheetsConnected ? spreadsheetInfo?.title || 'Google Spreadsheet Terhubung' : 'Google Spreadsheet Outlet'}
+            </h3>
           </div>
-          <h3 className="text-base sm:text-lg font-black tracking-tight">
+          <p className="text-xs text-slate-500 mt-1 max-w-lg">
             {isSheetsConnected
-              ? spreadsheetInfo?.title || 'Google Spreadsheet Terhubung'
-              : 'Hubungkan Google Sheets (Solusi Vercel)'}
-          </h3>
-          <p className="text-xs text-emerald-100/80 leading-relaxed">
-            {isSheetsConnected
-              ? `Tersambung via ${spreadsheetInfo?.type === 'webhook' ? 'Google Apps Script (Vercel Ready)' : 'Google OAuth'}. Setiap piket langsung otomatis tercatat di spreadsheet.`
-              : 'Gunakan metode Webhook Google Apps Script (bebas batas domain Vercel) atau Google Sign-in.'}
+              ? 'Data piket dan hasil verifikasi AI otomatis disinkronkan ke Google Spreadsheet.'
+              : 'Sambungkan Google Spreadsheet agar data piket tersimpan dan mudah diaudit.'}
           </p>
-
-          {oauthErrorNotice && (
-            <div className="p-2.5 rounded-lg bg-red-950/80 border border-red-500/50 text-[11px] text-red-200 mt-2">
-              <p className="font-bold text-white mb-0.5">Catatan Domain Vercel:</p>
-              <p>{oauthErrorNotice}</p>
-            </div>
-          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {isSheetsConnected && spreadsheetInfo ? (
             <>
-              {spreadsheetInfo.url && (
-                <a
-                  href={spreadsheetInfo.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-xs transition-colors"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Buka Spreadsheet</span>
-                </a>
-              )}
+              <a
+                href={spreadsheetInfo.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Buka Spreadsheet</span>
+              </a>
 
               {unsyncedCount > 0 && (
                 <button
                   disabled={isSyncingAll}
                   onClick={handleSyncAll}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-xs transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isSyncingAll ? 'animate-spin' : ''}`} />
                   <span>Sync ({unsyncedCount})</span>
@@ -323,44 +276,86 @@ export const SPVDashboard: React.FC = () => {
               )}
 
               <button
-                onClick={() => setShowWebhookSetup(true)}
-                className="px-2.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs text-white"
-                title="Ubah URL Webhook"
-              >
-                Pengaturan
-              </button>
-
-              <button
                 onClick={disconnectGoogleSpreadsheet}
-                className="text-xs text-emerald-300 hover:text-white underline ml-1"
+                className="text-xs text-slate-400 hover:text-slate-600 underline ml-1"
               >
-                Putus
+                Putuskan
               </button>
             </>
           ) : (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowWebhookSetup(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-sm transition-all"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs transition-colors"
               >
-                <Link className="w-4 h-4" />
-                <span>Sambungkan Webhook (Rekomendasi Vercel)</span>
-              </button>
-
-              <button
-                disabled={isSigningIn}
-                onClick={handleGoogleOAuthConnect}
-                className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition-all"
-              >
-                <span>{isSigningIn ? 'Loading...' : 'Login Google'}</span>
+                <LinkIcon className="w-3.5 h-3.5" />
+                <span>Hubungkan Google Sheets</span>
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* FILTER & SEARCH */}
-      <div className="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-2.5">
+      {/* Webhook Connection Dialog */}
+      {showWebhookSetup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-900">Hubungkan Google Spreadsheet</h3>
+              <button onClick={() => setShowWebhookSetup(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-3 text-xs text-slate-600">
+              <p>
+                Agar spreadsheet terhubung di Vercel tanpa kendala otorisasi akun Google:
+              </p>
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] space-y-1 text-slate-700">
+                <p className="font-bold text-slate-900">Cara Cepat (Google Apps Script):</p>
+                <p>1. Buat Spreadsheet di Google Drive Anda.</p>
+                <p>2. Klik <em>Extensions $\rightarrow$ Apps Script</em>, buat fungsi doPost sederhana untuk append row.</p>
+                <p>3. Deploy as Web App (Anyone can access), lalu tempel URL-nya di bawah:</p>
+              </div>
+
+              <form onSubmit={handleSaveWebhook} className="space-y-3 pt-1">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    URL Webhook Google Apps Script / Spreadsheet:
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                    value={webhookUrlInput}
+                    onChange={(e) => setWebhookUrlInput(e.target.value)}
+                    className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-900 bg-white"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowWebhookSetup(false)}
+                    className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800"
+                  >
+                    Simpan & Hubungkan
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filter and Search Bar */}
+      <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex flex-wrap items-center gap-2 flex-1">
           <div className="relative min-w-[180px] flex-1 sm:flex-initial">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -369,14 +364,14 @@ export const SPVDashboard: React.FC = () => {
               placeholder="Cari kru / area..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full text-xs font-semibold pl-8 pr-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800"
+              className="w-full text-xs pl-8 pr-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-800"
             />
           </div>
 
           <select
             value={filterArea}
             onChange={(e) => setFilterArea(e.target.value)}
-            className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-slate-700"
+            className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700"
           >
             <option value="all">Semua Area</option>
             {areas.map(a => (
@@ -385,28 +380,30 @@ export const SPVDashboard: React.FC = () => {
           </select>
 
           <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-slate-700"
+            value={filterShift}
+            onChange={(e) => setFilterShift(e.target.value)}
+            className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700"
           >
-            <option value="all">Semua Status AI</option>
-            <option value="BERSIH_SESUAI_STANDAR">Bersih Standar</option>
-            <option value="PERLU_TINDAKLANJUT">Perlu Revisi</option>
+            <option value="all">Semua Shift</option>
+            <option value="Pagi (08:00 - 15:00)">Pagi</option>
+            <option value="Sore / Closing (15:00 - 22:30)">Closing</option>
           </select>
         </div>
 
-        <span className="text-[11px] font-bold text-slate-400">
-          {filteredRecords.length} Data
+        <span className="text-[11px] font-medium text-slate-500">
+          {filteredRecords.length} Laporan
         </span>
       </div>
 
-      {/* RECORDS LIST */}
+      {/* Piket Records List */}
       <div className="space-y-2.5">
         {filteredRecords.length === 0 ? (
           <div className="bg-white rounded-2xl p-10 text-center border border-slate-200 shadow-2xs">
             <CheckCircle2 className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-            <h3 className="font-bold text-slate-700 text-sm">Belum Ada Laporan</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Laporan kru dari scan QR akan tampil di sini.</p>
+            <h3 className="font-bold text-slate-700 text-sm">Belum Ada Laporan Piket</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Laporan yang dikirim oleh kru akan otomatis muncul di sini.
+            </p>
           </div>
         ) : (
           filteredRecords.map((record) => {
@@ -415,89 +412,80 @@ export const SPVDashboard: React.FC = () => {
             return (
               <div
                 key={record.id}
-                className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200 hover:border-slate-300 shadow-2xs transition-all flex flex-col md:flex-row md:items-center justify-between gap-3"
+                className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200 hover:border-slate-300 shadow-2xs transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
               >
-                {/* Left side */}
-                <div className="flex items-start gap-3 flex-1">
+                {/* Left: Thumbnail & Details */}
+                <div className="flex items-start gap-3 flex-1 min-w-0">
                   <div
                     onClick={() => setSelectedRecordForDetail(record)}
-                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-slate-100 shrink-0 cursor-pointer border border-slate-200"
+                    className="w-16 h-16 rounded-lg overflow-hidden bg-slate-100 shrink-0 cursor-pointer border border-slate-200 relative group"
                   >
                     <img
                       src={record.photoBase64}
                       alt={record.areaName}
-                      className="w-full h-full object-cover hover:scale-105 transition-transform"
+                      className="w-full h-full object-cover"
                     />
+                    <div className="absolute inset-0 bg-slate-900/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                      <Eye className="w-4 h-4" />
+                    </div>
                   </div>
 
-                  <div className="space-y-1 flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-mono text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                  <div className="min-w-0 space-y-0.5 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono font-bold text-slate-400">
                         {record.areaCode}
                       </span>
-                      <span className="text-xs font-extrabold text-slate-900 truncate">
+                      <h4 className="text-xs font-bold text-slate-900 truncate">
                         {record.areaName}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-medium">
-                        • {record.shift.split(' ')[0]}
-                      </span>
+                      </h4>
+                      <span className="text-[10px] text-slate-400">•</span>
+                      <span className="text-[10px] text-slate-500">{record.shift.split(' ')[0]}</span>
                     </div>
 
                     <p className="text-xs text-slate-600">
-                      <strong className="text-slate-900">{record.crewName}</strong> • {record.date}, {record.time} WIB
+                      <strong>{record.crewName}</strong> • {record.date}, {record.time} WIB
                     </p>
 
-                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    <div className="flex items-center gap-2 pt-0.5">
                       <span
-                        className={`text-[9px] font-black px-2 py-0.2 rounded-full ${
-                          isClean ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                        className={`text-[10px] font-bold px-2 py-0.2 rounded-full border ${
+                          isClean
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
                         }`}
                       >
-                        {isClean ? 'AI: BERSIH' : 'AI: PERLU CEK'}
+                        {isClean ? 'AI: Bersih' : 'AI: Perlu Perhatian'}
                       </span>
-                      <p className="text-[11px] text-slate-500 italic truncate max-w-sm">
+                      <p className="text-[11px] text-slate-500 italic truncate max-w-xs">
                         "{record.aiVerification.summary}"
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Right side actions */}
-                <div className="flex items-center justify-end gap-2 border-t md:border-t-0 pt-2 md:pt-0">
-                  {record.syncedToSheets ? (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg flex items-center gap-1">
-                      <FileSpreadsheet className="w-3 h-3 text-emerald-600" />
-                      <span>Sheets OK</span>
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => handleSyncSingle(record.id)}
-                      className="text-[10px] font-bold text-slate-600 hover:text-emerald-700 bg-slate-100 px-2 py-1 rounded-lg flex items-center gap-1"
-                    >
-                      <FileSpreadsheet className="w-3 h-3" />
-                      <span>Sync</span>
-                    </button>
-                  )}
-
+                {/* Right: SPV Actions */}
+                <div className="flex items-center justify-end gap-2 border-t sm:border-t-0 pt-2 sm:pt-0">
                   {record.spvStatus === 'APPROVED' ? (
-                    <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-xl">
-                      ✓ Disetujui
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                      <span>Disetujui</span>
                     </span>
                   ) : record.spvStatus === 'REVISION_NEEDED' ? (
-                    <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-xl">
-                      Revisi
+                    <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>Revisi</span>
                     </span>
                   ) : (
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => updateRecordSPVStatus(record.id, 'APPROVED')}
-                        className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition-colors"
                       >
                         Setujui
                       </button>
                       <button
                         onClick={() => updateRecordSPVStatus(record.id, 'REVISION_NEEDED', 'Perlu diseka ulang')}
-                        className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-amber-100 text-slate-700 font-bold text-xs"
+                        className="px-2 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-medium hover:bg-slate-50 transition-colors"
                       >
                         Revisi
                       </button>
@@ -506,7 +494,8 @@ export const SPVDashboard: React.FC = () => {
 
                   <button
                     onClick={() => setSelectedRecordForDetail(record)}
-                    className="p-1.5 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-100"
+                    className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                    title="Detail"
                   >
                     <Eye className="w-4 h-4" />
                   </button>
@@ -517,179 +506,76 @@ export const SPVDashboard: React.FC = () => {
         )}
       </div>
 
-      {/* WEBHOOK SETUP MODAL (FOR VERCEL ZERO-OAUTH SYNC) */}
-      {showWebhookSetup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Link className="w-5 h-5 text-emerald-600" />
-                <h3 className="font-black text-base text-slate-900">
-                  Koneksi Google Sheets (Bebas Error Vercel)
-                </h3>
+      {/* DETAIL MODAL */}
+      {selectedRecordForDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-lg rounded-2xl overflow-hidden shadow-xl flex flex-col max-h-[90vh]">
+            <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-mono text-slate-400">{selectedRecordForDetail.areaCode}</span>
+                <h3 className="text-sm font-bold">{selectedRecordForDetail.areaName}</h3>
               </div>
               <button
-                onClick={() => setShowWebhookSetup(false)}
-                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100"
+                onClick={() => setSelectedRecordForDetail(null)}
+                className="p-1 text-slate-400 hover:text-white"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-2xl text-xs text-emerald-950 space-y-1">
-              <p className="font-bold flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-700" />
-                <span>Kenapa metode ini direkomendasikan untuk Vercel?</span>
-              </p>
-              <p className="text-emerald-900 leading-relaxed text-[11px]">
-                Google Apps Script Webhook bekerja tanpa OAuth popup (tidak akan terblokir oleh domain vercel.app), sehingga setiap kru yang mengirim piket akan otomatis langsung masuk ke spreadsheet Anda secara real-time!
-              </p>
-            </div>
+            <div className="p-5 overflow-y-auto space-y-3.5">
+              <div className="rounded-xl overflow-hidden bg-slate-950 border border-slate-200">
+                <img
+                  src={selectedRecordForDetail.photoBase64}
+                  alt={selectedRecordForDetail.areaName}
+                  className="w-full max-h-[280px] object-contain mx-auto"
+                />
+              </div>
 
-            <form onSubmit={handleSaveWebhook} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  1. Buat Spreadsheet & Buka Extensions {'>'} Apps Script
-                </label>
-                <p className="text-[11px] text-slate-500 mb-1.5">
-                  Salin skrip sederhana berikut ke Apps Script Anda:
-                </p>
-                <div className="relative">
-                  <pre className="text-[10px] bg-slate-900 text-slate-100 p-3 rounded-xl overflow-x-auto font-mono max-h-36">
-                    {sampleAppsScriptCode}
-                  </pre>
-                  <button
-                    type="button"
-                    onClick={copyScriptToClipboard}
-                    className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold flex items-center gap-1 shadow-xs"
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800">Analisis AI Gemini</span>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      selectedRecordForDetail.aiVerification.status === 'BERSIH_SESUAI_STANDAR'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}
                   >
-                    <Copy className="w-3 h-3" />
-                    <span>{copiedScript ? 'Tersalin!' : 'Salin Kode'}</span>
+                    {selectedRecordForDetail.aiVerification.status === 'BERSIH_SESUAI_STANDAR'
+                      ? 'Bersih Sesuai Standar'
+                      : 'Perlu Tindak Lanjut'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-700 leading-relaxed pt-1">
+                  {selectedRecordForDetail.aiVerification.summary}
+                </p>
+              </div>
+
+              {/* SPV Actions */}
+              <div className="space-y-2 pt-1">
+                <span className="text-xs font-bold text-slate-800">Status Approval:</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      updateRecordSPVStatus(selectedRecordForDetail.id, 'APPROVED', spvNoteInput);
+                      setSelectedRecordForDetail(prev => prev ? { ...prev, spvStatus: 'APPROVED' } : null);
+                    }}
+                    className="flex-1 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800"
+                  >
+                    Setujui Laporan
+                  </button>
+                  <button
+                    onClick={() => {
+                      updateRecordSPVStatus(selectedRecordForDetail.id, 'REVISION_NEEDED', spvNoteInput || 'Harap bersihkan ulang');
+                      setSelectedRecordForDetail(prev => prev ? { ...prev, spvStatus: 'REVISION_NEEDED' } : null);
+                    }}
+                    className="flex-1 py-2 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50"
+                  >
+                    Minta Revisi
                   </button>
                 </div>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  2. Klik Deploy {'>'} New Deployment {'>'} Web App
-                </label>
-                <p className="text-[11px] text-slate-500">
-                  Pilih "Execute as: Me" dan "Who has access: Anyone". Lalu salin URL Web App yang dihasilkan.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  3. Tempel URL Web App Google Apps Script di sini:
-                </label>
-                <input
-                  type="url"
-                  required
-                  placeholder="https://script.google.com/macros/s/.../exec"
-                  value={webhookInputUrl}
-                  onChange={(e) => setWebhookInputUrl(e.target.value)}
-                  className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-800 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  URL Google Spreadsheet Anda (Opsional, untuk tombol pintasan):
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://docs.google.com/spreadsheets/d/.../edit"
-                  value={sheetUrlInput}
-                  onChange={(e) => setSheetUrlInput(e.target.value)}
-                  className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-800"
-                />
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowWebhookSetup(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100"
-                >
-                  Tutup
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md"
-                >
-                  Simpan & Hubungkan
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* DETAIL MODAL */}
-      {selectedRecordForDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-xl rounded-3xl overflow-hidden shadow-2xl p-5 space-y-3.5 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <span className="font-mono text-xs font-bold text-red-600 bg-red-50 px-1.5 py-0.2 rounded">
-                  {selectedRecordForDetail.areaCode}
-                </span>
-                <h3 className="font-extrabold text-base text-slate-900 mt-0.5">
-                  {selectedRecordForDetail.areaName}
-                </h3>
-              </div>
-              <button
-                onClick={() => setSelectedRecordForDetail(null)}
-                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="rounded-xl overflow-hidden bg-slate-950 border border-slate-200">
-              <img
-                src={selectedRecordForDetail.photoBase64}
-                alt={selectedRecordForDetail.areaName}
-                className="w-full max-h-[300px] object-contain mx-auto"
-              />
-            </div>
-
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-700">Analisis AI Gemini:</span>
-                <span
-                  className={`font-black px-2 py-0.5 rounded-full text-[10px] ${
-                    selectedRecordForDetail.aiVerification.status === 'BERSIH_SESUAI_STANDAR'
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-amber-100 text-amber-800'
-                  }`}
-                >
-                  {selectedRecordForDetail.aiVerification.status}
-                </span>
-              </div>
-              <p className="text-slate-800 bg-white p-2.5 rounded-lg border border-slate-200/60 leading-relaxed font-medium">
-                {selectedRecordForDetail.aiVerification.summary}
-              </p>
-
-              {selectedRecordForDetail.aiVerification.findings?.length > 0 && (
-                <ul className="text-slate-600 space-y-1 text-[11px] pt-1">
-                  {selectedRecordForDetail.aiVerification.findings.map((f, i) => (
-                    <li key={i} className="flex items-start gap-1">
-                      <span className="text-red-500 font-bold">•</span>
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div className="pt-2 flex items-center justify-end">
-              <button
-                onClick={() => setSelectedRecordForDetail(null)}
-                className="px-4 py-2 rounded-xl bg-slate-900 text-white font-bold text-xs"
-              >
-                Tutup
-              </button>
             </div>
           </div>
         </div>

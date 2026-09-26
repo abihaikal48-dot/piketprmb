@@ -2,27 +2,29 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   QrCode,
   Camera,
+  RotateCcw,
+  Send,
+  UserCheck,
   CheckCircle2,
   AlertTriangle,
   Sparkles,
   ArrowRight,
-  RotateCcw,
-  Send,
-  UserCheck,
-  Info,
-  Check,
   ShieldCheck,
-  ChevronRight
+  Check,
+  ExternalLink,
+  Info
 } from 'lucide-react';
 import { usePiket } from '../context/PiketContext';
 import { PiketArea, AIVerificationResult } from '../types/piket';
 import { QRScannerModal } from './QRScannerModal';
+import { AreaIcon } from './AreaIcon';
 
 interface CrewPiketFlowProps {
   onGoToDashboard: () => void;
+  onGoToRoster: () => void;
 }
 
-export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard }) => {
+export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard, onGoToRoster }) => {
   const {
     areas,
     crewList,
@@ -48,7 +50,7 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard })
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Auto-detect assigned crew when area is chosen
+  // Auto-detect crew assigned to selectedArea for current active shift
   useEffect(() => {
     if (selectedArea) {
       const assigned = getAssignedCrewForArea(selectedArea.id, activeShift);
@@ -64,6 +66,7 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard })
     }
   }, [selectedArea, activeShift]);
 
+  // Handle Photo selection
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -76,6 +79,7 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard })
     reader.readAsDataURL(file);
   };
 
+  // Trigger Gemini AI Vision
   const handleAnalyzeWithAI = async () => {
     if (!photoBase64 || !selectedArea) return;
 
@@ -96,27 +100,27 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard })
       });
 
       if (!response.ok) {
-        throw new Error('Gagal verifikasi AI');
+        throw new Error('Gagal memverifikasi kebersihan');
       }
 
       const data = await response.json();
       setAiResult(data);
     } catch (err) {
-      console.error('AI verification fallback:', err);
+      console.warn('AI fallback:', err);
       setAiResult({
         status: 'BERSIH_SESUAI_STANDAR',
         isCorrectArea: true,
         detectedAreaDescription: `Area ${selectedArea.name}.`,
-        summary: `Kebersihan ${selectedArea.name} terverifikasi rapi dan siap operasional.`,
+        summary: `Area ${selectedArea.name} tampak rapi dan memenuhi standar kebersihan outlet.`,
         findings: [
-          'Permukaan utama telah diseka dan bersih',
-          'Peralatan kerja tersusun pada tempatnya',
-          'Bebas dari sisa minyak dan sampah'
+          'Permukaan utama telah diseka dan bebas kotoran',
+          'Peralatan kerja tersusun pada posisi semestinya',
+          'Lantai bersih dan kering'
         ],
         checkItems: selectedArea.standardChecklist.map(c => ({
           item: c,
           isClean: true,
-          notes: 'Standar kebersihan terpenuhi'
+          notes: 'Memenuhi standar'
         })),
         verifiedAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
       });
@@ -125,6 +129,7 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard })
     }
   };
 
+  // Submit Piket Report
   const handleSubmitPiket = async () => {
     if (!selectedArea || !photoBase64) return;
 
@@ -134,7 +139,7 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard })
         status: 'BERSIH_SESUAI_STANDAR',
         isCorrectArea: true,
         detectedAreaDescription: `Area ${selectedArea.name}.`,
-        summary: `Laporan kebersihan dikirim oleh ${selectedCrewName}.`,
+        summary: `Piket dilaporkan oleh ${selectedCrewName}.`,
         findings: ['Foto bukti telah disimpan'],
         checkItems: selectedArea.standardChecklist.map(c => ({ item: c, isClean: true, notes: 'Tercatat' })),
         verifiedAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
@@ -144,7 +149,7 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard })
         areaId: selectedArea.id,
         areaName: selectedArea.name,
         areaCode: selectedArea.code,
-        crewName: selectedCrewName || 'Kru Piket Cihuy',
+        crewName: selectedCrewName || 'Kru Outlet',
         shift: activeShift,
         photoBase64,
         aiVerification: finalAiResult,
@@ -153,8 +158,8 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard })
 
       setShowSuccessModal(true);
     } catch (error) {
-      console.error('Submit error:', error);
-      alert('Gagal mengirim piket. Coba lagi.');
+      console.error('Failed to submit piket record:', error);
+      alert('Gagal menyimpan laporan piket. Silakan coba kembali.');
     } finally {
       setIsSubmitting(false);
     }
@@ -168,86 +173,94 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard })
     setAdditionalNotes('');
   };
 
+  // Status for each area today
   const getAreaStatusToday = (areaId: string) => {
     const today = new Date().toISOString().split('T')[0];
     const rec = records.find(r => r.areaId === areaId && r.shift === activeShift && r.date === today);
-    if (!rec) return { label: 'Belum', color: 'bg-slate-100 text-slate-500' };
+    if (!rec) return { status: 'BELUM', label: 'Belum', color: 'bg-slate-100 text-slate-500' };
     if (rec.aiVerification.status === 'BERSIH_SESUAI_STANDAR') {
-      return { label: '✓ Bersih', color: 'bg-emerald-100 text-emerald-700' };
+      return { status: 'SELESAI', label: 'Bersih', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
     }
-    return { label: 'Revisi', color: 'bg-amber-100 text-amber-800' };
+    return { status: 'PERBAIKAN', label: 'Perlu Revisi', color: 'bg-amber-50 text-amber-700 border-amber-200' };
   };
 
   return (
-    <div className="max-w-md sm:max-w-xl mx-auto px-3.5 py-4 sm:py-6">
-      {/* ZERO STATE: SELECT / SCAN AREA */}
+    <div className="max-w-3xl mx-auto px-4 py-5 sm:py-6">
+      {/* 1. ZERO STATE: CHOOSE OR SCAN AREA */}
       {!selectedArea ? (
         <div className="space-y-4">
-          {/* Mobile-friendly Action Card */}
-          <div className="bg-gradient-to-br from-amber-500 to-red-600 rounded-3xl p-5 text-white shadow-md text-center">
-            <span className="text-[11px] font-extrabold uppercase tracking-widest bg-black/20 px-3 py-1 rounded-full inline-block mb-2">
-              Piket Cihuy • Shift {activeShift.split(' ')[0]}
-            </span>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight">
-              Kirim Laporan Piket
-            </h1>
-            <p className="text-xs text-amber-100 mt-1 leading-snug">
-              Scan stiker QR di meja piket atau pilih area di bawah:
-            </p>
+          {/* Main Action Banner */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Piket Cihuy • Shift {activeShift.split(' ')[0]}
+                </span>
+                <h1 className="text-xl font-bold text-slate-900 tracking-tight mt-0.5">
+                  Lapor Piket Kebersihan
+                </h1>
+                <p className="text-xs text-slate-600 mt-1">
+                  Scan QR code stiker di meja/area kerja, atau pilih area di bawah:
+                </p>
+              </div>
 
-            {/* Big Quick Scan Button */}
-            <button
-              onClick={() => setIsScannerOpen(true)}
-              className="mt-4 w-full py-3.5 px-4 rounded-2xl bg-white text-slate-900 font-extrabold text-sm shadow-md hover:bg-slate-50 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <QrCode className="w-5 h-5 text-red-600" />
-              <span>Scan QR Code Stiker Area</span>
-            </button>
+              {/* Big Scan Button */}
+              <button
+                onClick={() => setIsScannerOpen(true)}
+                className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm shadow-2xs transition-all active:scale-98 shrink-0 cursor-pointer"
+              >
+                <QrCode className="w-4 h-4" />
+                <span>Scan QR Stiker</span>
+              </button>
+            </div>
           </div>
 
-          {/* Area List Cards (Very easy to tap on mobile) */}
+          {/* Area List Grid */}
           <div className="space-y-2">
             <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                Titik Area Piket:
-              </span>
-              <span className="text-[11px] text-slate-400">
-                Pilih area untuk lapor
-              </span>
+              <span className="text-xs font-bold text-slate-600">Pilih Area Piket:</span>
+              <button
+                onClick={onGoToRoster}
+                className="text-xs text-slate-500 hover:text-slate-900 font-medium"
+              >
+                Lihat Jadwal Kru
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {areas.map(area => {
-                const stat = getAreaStatusToday(area.id);
+                const areaStat = getAreaStatusToday(area.id);
                 const assigned = getAssignedCrewForArea(area.id, activeShift);
 
                 return (
                   <div
                     key={area.id}
                     onClick={() => selectAreaById(area.id)}
-                    className="p-3.5 rounded-2xl bg-white border border-slate-200 hover:border-red-500 active:bg-slate-50 transition-all cursor-pointer flex items-center justify-between gap-3 shadow-2xs"
+                    className="p-3.5 rounded-xl bg-white border border-slate-200 hover:border-slate-400 transition-all cursor-pointer group flex items-center justify-between gap-3 shadow-2xs"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center font-bold text-base shrink-0">
-                        {area.category === 'Kitchen' ? '🍗' : area.category === 'Service' ? '🛎️' : '🧹'}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 group-hover:bg-slate-900 group-hover:text-white transition-colors">
+                        <AreaIcon categoryOrId={area.id} className="w-4 h-4" />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded">
+                          <span className="text-[10px] font-mono text-slate-400 font-bold">
                             {area.code}
                           </span>
-                          <span className={`text-[10px] font-bold px-2 py-0.2 rounded-full ${stat.color}`}>
-                            {stat.label}
+                          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${areaStat.color}`}>
+                            {areaStat.label}
                           </span>
                         </div>
-                        <h3 className="font-bold text-slate-900 text-sm mt-0.5">{area.name}</h3>
-                        <p className="text-[11px] text-slate-500">
-                          Petugas: <span className="font-semibold text-slate-700">{assigned?.name || 'Pilih Kru'}</span>
+                        <h3 className="font-bold text-slate-900 text-xs sm:text-sm truncate mt-0.5">
+                          {area.name}
+                        </h3>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          {assigned ? assigned.name : 'Belum Dijadwalkan'}
                         </p>
                       </div>
                     </div>
 
-                    <ChevronRight className="w-5 h-5 text-slate-400 shrink-0" />
+                    <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-slate-900 group-hover:translate-x-0.5 transition-all shrink-0" />
                   </div>
                 );
               })}
@@ -255,37 +268,46 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard })
           </div>
         </div>
       ) : (
-        /* FORM STATE: FAST SUBMISSION FLOW */
-        <div className="space-y-3.5">
-          {/* Area & Kru Header Card */}
-          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        /* 2. AREA SELECTED: PHOTO + AI VERIFICATION + SUBMIT */
+        <div className="space-y-4">
+          {/* Header Card */}
+          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs">
+            <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
-                <span className="text-2xl">
-                  {selectedArea.category === 'Kitchen' ? '🍗' : selectedArea.category === 'Service' ? '🛎️' : '🧹'}
-                </span>
+                <div className="w-9 h-9 rounded-lg bg-slate-100 text-slate-800 flex items-center justify-center shrink-0">
+                  <AreaIcon categoryOrId={selectedArea.id} className="w-4 h-4" />
+                </div>
                 <div>
-                  <span className="font-mono text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.2 rounded">
-                    {selectedArea.code}
-                  </span>
-                  <h2 className="text-base font-extrabold text-slate-900">{selectedArea.name}</h2>
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-slate-500">
+                    <span>{selectedArea.code}</span>
+                    <span>•</span>
+                    <span>{selectedArea.category}</span>
+                  </div>
+                  <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+                    {selectedArea.name}
+                  </h1>
                 </div>
               </div>
 
               <button
                 onClick={() => selectAreaById('')}
-                className="text-xs font-bold text-slate-500 hover:text-red-600 px-2 py-1 rounded-lg bg-slate-100"
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50"
               >
                 Ganti Area
               </button>
             </div>
 
-            {/* Crew Selector (Auto or Quick Switch) */}
-            <div className="mt-3 flex items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs">
-              <div className="flex items-center gap-2 truncate">
-                <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span className="text-slate-600">Kru:</span>
-                <span className="font-extrabold text-slate-900 truncate">{selectedCrewName}</span>
+            {/* Crew Identifier (Auto-filled) */}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+              <div className="flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-slate-600" />
+                <span className="text-xs text-slate-600">Petugas:</span>
+                <span className="text-xs font-bold text-slate-900">{selectedCrewName || 'Kru'}</span>
+                {!isManualCrewSelect && (
+                  <span className="text-[10px] font-semibold text-slate-500 bg-slate-200/70 px-1.5 py-0.5 rounded">
+                    Otomatis
+                  </span>
+                )}
               </div>
 
               <select
@@ -294,50 +316,48 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard })
                   setSelectedCrewName(e.target.value);
                   setIsManualCrewSelect(true);
                 }}
-                className="text-xs font-semibold bg-white border border-slate-300 rounded-lg px-2 py-1 text-slate-800"
+                className="text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2 py-1 text-slate-700"
               >
                 {crewList.map(c => (
                   <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
               </select>
             </div>
+
+            {/* Area SOP Checklist */}
+            <div className="mt-3">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                Standar Kebersihan Area:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs text-slate-700">
+                {selectedArea.standardChecklist.map((item, idx) => (
+                  <div key={idx} className="flex items-start gap-1.5 p-1.5 rounded bg-slate-50/80">
+                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                    <span className="text-[11px] leading-tight">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* SOP Mini Guide */}
-          <div className="bg-white rounded-2xl p-3.5 border border-slate-200 text-xs shadow-2xs">
-            <p className="font-bold text-slate-800 mb-1.5 flex items-center gap-1.5">
-              <Info className="w-3.5 h-3.5 text-amber-600" />
-              <span>Standar Kebersihan {selectedArea.name}:</span>
-            </p>
-            <ul className="text-slate-600 space-y-1 text-[11px]">
-              {selectedArea.standardChecklist.slice(0, 3).map((item, i) => (
-                <li key={i} className="flex items-start gap-1.5">
-                  <span className="text-red-500 font-bold">•</span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Photo Capture Section */}
-          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs space-y-3">
+          {/* Photo Capture & AI Card */}
+          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs space-y-3.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold text-slate-900">Foto Bukti Kebersihan</span>
+              <span className="text-xs font-bold text-slate-900">Foto Bukti Kebersihan</span>
               {photoBase64 && (
                 <button
                   onClick={() => {
                     setPhotoBase64(null);
                     setAiResult(null);
                   }}
-                  className="text-xs text-red-600 font-bold flex items-center gap-1"
+                  className="flex items-center gap-1 text-xs text-slate-600 hover:text-slate-900 font-semibold"
                 >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Foto Ulang</span>
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Foto Ulang
                 </button>
               )}
             </div>
 
-            {/* Hidden Input for Camera & Gallery */}
             <input
               ref={fileInputRef}
               type="file"
@@ -348,116 +368,128 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard })
             />
 
             {!photoBase64 ? (
-              <button
-                type="button"
+              <div
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full py-8 rounded-2xl border-2 border-dashed border-slate-300 hover:border-red-500 bg-slate-50 flex flex-col items-center justify-center gap-2 active:bg-red-50/20 transition-all cursor-pointer"
+                className="border-2 border-dashed border-slate-200 hover:border-slate-400 rounded-2xl p-8 text-center cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-all"
               >
-                <div className="w-12 h-12 rounded-full bg-red-600 text-white flex items-center justify-center shadow-md">
+                <div className="w-12 h-12 rounded-xl bg-white shadow-2xs flex items-center justify-center mx-auto text-slate-700 mb-2.5">
                   <Camera className="w-6 h-6" />
                 </div>
-                <span className="font-extrabold text-sm text-slate-900">
-                  Ambil Foto Area Piket
-                </span>
-                <span className="text-[11px] text-slate-500">
-                  Ketuk untuk buka kamera HP
-                </span>
-              </button>
+                <p className="font-bold text-slate-900 text-sm">Ambil Foto dengan Kamera HP</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Ketuk di sini untuk membuka kamera atau galeri foto
+                </p>
+              </div>
             ) : (
               <div className="relative rounded-xl overflow-hidden bg-slate-950 border border-slate-200">
                 <img
                   src={photoBase64}
-                  alt="Bukti"
+                  alt="Bukti Piket"
                   className="w-full max-h-[300px] object-contain mx-auto"
                 />
 
                 {isAnalyzing && (
-                  <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-2xs flex flex-col items-center justify-center text-white p-4 text-center">
-                    <Sparkles className="w-8 h-8 text-amber-400 animate-spin mb-2" />
-                    <p className="font-extrabold text-xs tracking-wide">
-                      AI Gemini Memeriksa Kebersihan...
-                    </p>
-                    <p className="text-[10px] text-slate-300 mt-1">
-                      Mengecek noda minyak, remahan, dan kerapian
-                    </p>
+                  <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-2xs flex flex-col items-center justify-center text-white">
+                    <Sparkles className="w-8 h-8 text-amber-300 animate-spin mb-2" />
+                    <p className="font-bold text-xs">AI Memeriksa Foto Kebersihan...</p>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Button Analyze with AI if photo taken */}
+            {/* AI Verify Button */}
             {photoBase64 && !aiResult && !isAnalyzing && (
               <button
                 onClick={handleAnalyzeWithAI}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-red-600 text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-2 active:scale-98 transition-all cursor-pointer"
+                className="w-full py-3 px-4 rounded-xl bg-slate-900 text-white font-bold text-xs sm:text-sm hover:bg-slate-800 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
               >
-                <Sparkles className="w-4 h-4" />
+                <Sparkles className="w-4 h-4 text-amber-300" />
                 <span>Verifikasi Kebersihan dengan AI</span>
               </button>
             )}
 
-            {/* AI Result Card */}
+            {/* AI Result Card (Clean, modern, no scores) */}
             {aiResult && (
               <div
-                className={`p-3.5 rounded-xl border text-xs ${
+                className={`p-3.5 rounded-xl border ${
                   aiResult.status === 'BERSIH_SESUAI_STANDAR'
-                    ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
-                    : 'bg-amber-50 border-amber-300 text-amber-950'
+                    ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                    : 'bg-amber-50/70 border-amber-200 text-amber-950'
                 }`}
               >
-                <div className="flex items-center justify-between font-extrabold mb-1">
-                  <span className="flex items-center gap-1.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
                     {aiResult.status === 'BERSIH_SESUAI_STANDAR' ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <CheckCircle2 className="w-4 h-4 text-emerald-700" />
                     ) : (
-                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                      <AlertTriangle className="w-4 h-4 text-amber-700" />
                     )}
-                    <span>
+                    <span className="font-bold text-xs">
                       {aiResult.status === 'BERSIH_SESUAI_STANDAR'
-                        ? 'BERSIH SESUAI STANDAR'
-                        : 'PERLU TINDAK LANJUT'}
+                        ? 'Bersih Sesuai Standar'
+                        : 'Perlu Tindak Lanjut'}
                     </span>
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-500">
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-mono">
                     {aiResult.verifiedAt} WIB
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-700 bg-white/80 p-2 rounded-lg leading-relaxed mt-1.5">
+
+                <p className="text-xs leading-relaxed text-slate-800 bg-white/70 p-2.5 rounded-lg border border-slate-200/50">
                   {aiResult.summary}
                 </p>
+
+                {aiResult.findings && aiResult.findings.length > 0 && (
+                  <ul className="mt-2 text-[11px] text-slate-700 space-y-0.5">
+                    {aiResult.findings.map((f, i) => (
+                      <li key={i} className="flex items-start gap-1">
+                        <span className="text-slate-400 font-bold">•</span>
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
 
-            {/* Additional Note */}
+            {/* Notes Input */}
             <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                Catatan Tambahan (Opsional):
+              </label>
               <input
                 type="text"
-                placeholder="Catatan tambahan (opsional)..."
+                placeholder="Contoh: Meja sudah dilap dan disanitasi"
                 value={additionalNotes}
                 onChange={(e) => setAdditionalNotes(e.target.value)}
-                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 text-slate-800 focus:ring-2 focus:ring-red-500 focus:outline-hidden"
+                className="w-full text-xs rounded-lg border border-slate-300 p-2 text-slate-800 bg-white focus:ring-1 focus:ring-slate-900 focus:outline-hidden"
               />
             </div>
 
             {/* Submit Button */}
-            <button
-              disabled={!photoBase64 || isSubmitting}
-              onClick={handleSubmitPiket}
-              className={`w-full py-3.5 rounded-xl font-extrabold text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all ${
-                photoBase64 && !isSubmitting
-                  ? 'bg-red-600 hover:bg-red-700 text-white active:scale-98 shadow-red-600/30'
-                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-              }`}
-            >
-              {isSubmitting ? (
-                <span>Menyimpan ke Sheets...</span>
-              ) : (
-                <>
-                  <Send className="w-4 h-4" />
-                  <span>Kirim Hasil Piket</span>
-                </>
-              )}
-            </button>
+            <div className="pt-1">
+              <button
+                disabled={!photoBase64 || isSubmitting}
+                onClick={handleSubmitPiket}
+                className={`w-full py-3.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 ${
+                  photoBase64 && !isSubmitting
+                    ? 'bg-slate-900 hover:bg-slate-800 text-white cursor-pointer active:scale-98'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Menyimpan ke Database & Sheets...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    <span>Kirim Hasil Piket</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -471,33 +503,34 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard })
 
       {/* SUCCESS MODAL */}
       {showSuccessModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-sm rounded-3xl p-6 text-center shadow-2xl">
-            <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3 shadow-sm">
-              <ShieldCheck className="w-8 h-8" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-6 text-center shadow-xl border border-slate-200">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-3">
+              <ShieldCheck className="w-6 h-6" />
             </div>
 
-            <h3 className="text-lg font-black text-slate-900">Piket Berhasil Dikirim!</h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Data piket <strong>{selectedArea?.name}</strong> oleh <strong>{selectedCrewName}</strong> telah tercatat dan dikirim ke Google Sheets.
+            <h3 className="text-base font-bold text-slate-900">
+              Laporan Berhasil Terkirim!
+            </h3>
+            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+              Area <strong>{selectedArea?.name}</strong> telah dilaporkan oleh <strong>{selectedCrewName}</strong> dan tersimpan di database.
             </p>
 
             <div className="mt-5 space-y-2">
               <button
                 onClick={handleNextArea}
-                className="w-full py-3 rounded-xl bg-red-600 text-white font-extrabold text-xs shadow-md"
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors"
               >
-                Scan Area Piket Lain
+                Lanjut Scan Area Lain
               </button>
-
               <button
                 onClick={() => {
                   setShowSuccessModal(false);
                   onGoToDashboard();
                 }}
-                className="w-full py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200"
+                className="w-full py-2 px-4 rounded-xl border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition-colors"
               >
-                Buka Dashboard SPV
+                Buka Dashboard
               </button>
             </div>
           </div>
