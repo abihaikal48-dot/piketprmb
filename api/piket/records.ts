@@ -24,10 +24,25 @@ export default async function handler(req: any, res: any) {
       if (!newRecord.id) {
         newRecord.id = 'cihuy-' + Date.now();
       }
-      serverRecords.unshift(newRecord);
+      const exists = serverRecords.some(r => r.id === newRecord.id);
+      if (!exists) {
+        serverRecords.unshift(newRecord);
+      }
       return res.status(200).json({ success: true, record: newRecord });
     }
     return res.status(400).json({ error: 'Body required' });
+  }
+
+  if (req.method === 'PATCH') {
+    const { id } = req.query;
+    const updates = req.body;
+    const targetId = id || updates.id;
+    const index = serverRecords.findIndex(r => r.id === targetId);
+    if (index !== -1) {
+      serverRecords[index] = { ...serverRecords[index], ...updates };
+      return res.status(200).json({ success: true, record: serverRecords[index] });
+    }
+    return res.status(404).json({ error: 'Record not found' });
   }
 
   return res.status(405).json({ error: 'Method not allowed' });

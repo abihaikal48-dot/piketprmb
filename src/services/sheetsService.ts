@@ -85,41 +85,100 @@ export const saveWebhookConnection = (webhookUrl: string, sheetUrl?: string, tit
 
 export const GOOGLE_APPS_SCRIPT_CODE = `function doPost(e) {
   try {
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-    // Tambah header 11 kolom jika sheet masih baru/kosong
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getActiveSheet();
+    
+    // Inisialisasi Header Mewah & Rapi jika sheet masih kosong
     if (sheet.getLastRow() === 0) {
-      sheet.appendRow([
+      var headers = [
         "Waktu & Tanggal",
-        "Nama Kru",
         "Shift",
         "Area Piket",
         "Kode Area",
-        "Status AI",
-        "Ringkasan AI",
-        "Temuan Detail AI",
-        "Status SPV",
-        "Catatan SPV",
+        "Petugas Kru",
+        "Status Verifikasi AI",
+        "Validasi Foto Area",
+        "Ringkasan Kebersihan AI",
+        "Poin Temuan Detail",
+        "Status Kepala Outlet",
+        "Catatan Kepala Outlet (Ummu Sallaamah)",
+        "Foto Bukti Kebersihan",
         "ID Laporan"
-      ]);
-      sheet.getRange(1, 1, 1, 11).setFontWeight("bold");
+      ];
+      sheet.appendRow(headers);
+      
+      // Styling Header: Teal Tua, Teks Putih Tebal, Freeze Baris 1
+      var headerRange = sheet.getRange(1, 1, 1, headers.length);
+      headerRange.setBackground("#0f766e")
+                 .setFontColor("#ffffff")
+                 .setFontWeight("bold")
+                 .setFontSize(10)
+                 .setVerticalAlignment("middle");
+      sheet.setRowHeight(1, 36);
+      sheet.setFrozenRows(1);
     }
     
     var data = JSON.parse(e.postData.contents);
+    
+    // Simpan Foto Bukti ke Google Drive otomatis (jika ada)
+    var photoCell = "-";
+    if (data.photoBase64 && data.photoBase64.length > 50) {
+      try {
+        var base64Clean = data.photoBase64;
+        if (base64Clean.indexOf(";base64,") > -1) {
+          base64Clean = base64Clean.split(";base64,")[1];
+        }
+        var decoded = Utilities.base64Decode(base64Clean);
+        var filename = "Piket_" + (data.areaCode || "Area") + "_" + (data.id || Date.now()) + ".jpg";
+        var blob = Utilities.newBlob(decoded, "image/jpeg", filename);
+        
+        // Buat folder khusus di Google Drive
+        var folderName = "Foto Piket Hara Chicken";
+        var folders = DriveApp.getFoldersByName(folderName);
+        var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(folderName);
+        var file = folder.createFile(blob);
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        
+        var viewUrl = file.getUrl();
+        photoCell = '=HYPERLINK("' + viewUrl + '", "Lihat Foto Bukti (Drive)")';
+      } catch (driveErr) {
+        photoCell = "Tersimpan di Aplikasi";
+      }
+    }
+    
+    // Tambah baris data baru
     sheet.appendRow([
       data.timestamp || new Date().toLocaleString("id-ID"),
-      data.crewName || "-",
       data.shift || "-",
       data.areaName || "-",
       data.areaCode || "-",
+      data.crewName || "-",
       data.aiStatus || "-",
+      data.isCorrectArea || "SESUAI",
       data.aiSummary || "-",
       data.aiFindings || "-",
-      data.spvStatus || "PENDING",
-      data.spvNotes || "-",
+      data.headStatus || "PENDING KEPALA OUTLET",
+      data.headNotes || "-",
+      photoCell,
       data.id || "-"
     ]);
     
-    return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
+    var newRow = sheet.getLastRow();
+    sheet.setRowHeight(newRow, 30);
+    sheet.getRange(newRow, 1, 1, 13).setVerticalAlignment("middle");
+    
+    // Pewarnaan status otomatis (Hijau jika bersih, Kuning jika perlu tindak lanjut)
+    var statusRange = sheet.getRange(newRow, 6);
+    if ((data.aiStatus || "").indexOf("BERSIH") > -1) {
+      statusRange.setBackground("#dcfce7").setFontColor("#166534").setFontWeight("bold");
+    } else {
+      statusRange.setBackground("#fee2e2").setFontColor("#991b1b").setFontWeight("bold");
+    }
+    
+    // Auto-fit kolom agar terbaca sangat rapi
+    sheet.autoResizeColumns(1, 13);
+    
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", row: newRow }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
@@ -133,17 +192,21 @@ export const appendRecordViaWebhook = async (
   record: PiketRecord
 ): Promise<boolean> => {
   const isClean = record.aiVerification?.status === 'BERSIH_SESUAI_STANDAR';
+  const isCorrect = record.aiVerification?.isCorrectArea ?? true;
+
   const payload = {
     timestamp: `${record.date} ${record.time}`,
-    crewName: record.crewName,
     shift: record.shift,
     areaName: record.areaName,
     areaCode: record.areaCode,
+    crewName: record.crewName,
     aiStatus: isClean ? 'BERSIH (STANDAR)' : 'PERLU TINDAK LANJUT',
+    isCorrectArea: isCorrect ? 'SESUAI AREA' : 'FOTO DITOLAK / TIDAK SESUAI',
     aiSummary: record.aiVerification?.summary || '-',
     aiFindings: (record.aiVerification?.findings || []).join('; ') || '-',
-    spvStatus: record.spvStatus === 'APPROVED' ? 'DISETUJUI SPV' : record.spvStatus === 'REVISION_NEEDED' ? 'PERLU REVISI' : 'PENDING SPV',
-    spvNotes: record.spvNotes || '-',
+    headStatus: record.spvStatus === 'APPROVED' ? 'DISETUJUI KEPALA OUTLET' : record.spvStatus === 'REVISION_NEEDED' ? 'PERLU REVISI' : 'PENDING KEPALA OUTLET',
+    headNotes: record.spvNotes || '-',
+    photoBase64: record.photoBase64 || '',
     id: record.id,
   };
 
@@ -167,15 +230,17 @@ export const testWebhookConnection = async (webhookUrl: string): Promise<boolean
   const now = new Date();
   const dummyPayload = {
     timestamp: now.toLocaleDateString('id-ID') + ' ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-    crewName: 'Tes Sistem Piket',
-    shift: 'Uji Koneksi',
-    areaName: 'Area Dapur / Fryer (Uji Coba)',
-    areaCode: 'TEST-01',
+    shift: 'Pagi (08:00 - 15:00)',
+    areaName: 'Halaman Depan + Samping + Keset (Uji Coba)',
+    areaCode: 'HARA-HLM-01',
+    crewName: 'Bangkit Tri Widodo',
     aiStatus: 'BERSIH (STANDAR)',
+    isCorrectArea: 'SESUAI AREA',
     aiSummary: 'Koneksi otomatis dari web app Piket Cihuy berhasil terhubung ke Google Spreadsheet.',
-    aiFindings: 'Tes sinkronisasi data berhasil terkirim',
-    spvStatus: 'DISETUJUI SPV',
-    spvNotes: 'Sinkronisasi Otomatis Aktif',
+    aiFindings: 'Tes sinkronisasi data berhasil terkirim; Format kolom rapi & siap digunakan',
+    headStatus: 'DISETUJUI KEPALA OUTLET',
+    headNotes: 'Sistem Terhubung - Kepala Outlet: Ummu Sallaamah',
+    photoBase64: '',
     id: `TEST-${Date.now()}`
   };
 
@@ -307,4 +372,43 @@ export const appendPiketRecordToSheet = async (
   }
 
   return true;
+};
+
+// Generates tab-separated text (TSV) for direct 1-click copy-paste into Google Sheets / Excel
+export const getRecordsTsvString = (records: PiketRecord[]): string => {
+  const headers = [
+    'Waktu & Tanggal',
+    'Shift',
+    'Area Piket',
+    'Kode Area',
+    'Petugas Kru',
+    'Status AI',
+    'Validasi Foto',
+    'Ringkasan AI',
+    'Temuan Detail AI',
+    'Status Kepala Outlet',
+    'Catatan Kepala Outlet (Ummu Sallaamah)',
+    'ID Laporan'
+  ];
+
+  const rows = records.map(r => {
+    const isClean = r.aiVerification?.status === 'BERSIH_SESUAI_STANDAR';
+    const isCorrect = r.aiVerification?.isCorrectArea ?? true;
+    return [
+      `${r.date} ${r.time}`,
+      r.shift,
+      r.areaName,
+      r.areaCode,
+      r.crewName,
+      isClean ? 'BERSIH (STANDAR)' : 'PERLU TINDAK LANJUT',
+      isCorrect ? 'SESUAI AREA' : 'FOTO DITOLAK / TIDAK SESUAI',
+      (r.aiVerification?.summary || '-').replace(/\t|\n/g, ' '),
+      (r.aiVerification?.findings?.join('; ') || '-').replace(/\t|\n/g, ' '),
+      r.spvStatus === 'APPROVED' ? 'DISETUJUI KEPALA OUTLET' : r.spvStatus === 'REVISION_NEEDED' ? 'PERLU REVISI' : 'PENDING KEPALA OUTLET',
+      (r.spvNotes || '-').replace(/\t|\n/g, ' '),
+      r.id
+    ].join('\t');
+  });
+
+  return [headers.join('\t'), ...rows].join('\n');
 };

@@ -51,7 +51,7 @@ export const RosterManager: React.FC = () => {
   };
 
   const handleAutoDistribute = () => {
-    const activeCrews = crewList.filter(c => c.active && c.role !== 'Supervisor');
+    const activeCrews = crewList.filter(c => c.active && c.role !== 'Supervisor' && c.role !== 'Kepala Outlet');
     if (activeCrews.length === 0) return;
 
     areas.forEach((area, index) => {
@@ -79,13 +79,13 @@ export const RosterManager: React.FC = () => {
       <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-            Pengaturan Roster
+            Pengaturan Roster • Kepala Outlet: Ummu Sallaamah
           </span>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight mt-0.5">
-            Jadwal Piket Kru Cihuy
+            Jadwal Piket Kru Hara Chicken
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Atur kru yang bertugas di tiap area. Saat kru scan QR, nama mereka otomatis terisi.
+            Atur kru yang bertugas di 6 area piket. Saat kru scan QR, nama mereka otomatis terisi.
           </p>
         </div>
 

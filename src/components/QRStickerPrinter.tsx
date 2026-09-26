@@ -9,7 +9,9 @@ export const QRStickerPrinter: React.FC = () => {
   const { areas } = usePiket();
   const [qrDataUrls, setQrDataUrls] = useState<Record<string, string>>({});
   const [stickerSize, setStickerSize] = useState<'standard' | 'large' | 'compact'>('standard');
-  const [baseUrl, setBaseUrl] = useState<string>('https://piket-cihuy.vercel.app');
+  const [baseUrl, setBaseUrl] = useState<string>(() => {
+    return typeof window !== 'undefined' ? window.location.origin : 'https://piket-cihuy.vercel.app';
+  });
 
   useEffect(() => {
     // If running in browser and has origin, user can use current or vercel URL

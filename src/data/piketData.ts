@@ -1,99 +1,103 @@
 import { PiketArea, CrewMember, PiketSchedule, PiketRecord } from '../types/piket';
 
+// 6 Area Piket Resmi Sesuai Jadwal Outlet Hara Chicken (Gambar Jadwal Piket)
 export const DEFAULT_AREAS: PiketArea[] = [
   {
-    id: 'fryer-station',
-    name: 'Area Penggorengan & Fryer',
-    code: 'HARA-FRY-01',
+    id: 'area-halaman',
+    name: 'Halaman Depan + Samping + Keset',
+    code: 'HARA-HLM-01',
+    category: 'Facility',
+    description: 'Halaman luar depan & samping outlet, selokan kecil, dan kebersihan keset pintu masuk.',
+    standardChecklist: [
+      'Halaman depan & samping disapu bersih dari dedaunan, puntung rokok, & sampah',
+      'Keset pintu masuk utama dikebaskan, disikat, dan ditata lurus rapi',
+      'Tempat sampah luar tidak meluap & kantong plastik baru terpasang',
+      'Paving / teras luar disiram dan disapu bersih'
+    ],
+    color: 'from-emerald-500 to-green-600'
+  },
+  {
+    id: 'area-wastafel-cust',
+    name: 'Wastafel Customer + Cermin + Baby Chair',
+    code: 'HARA-WST-02',
+    category: 'Service',
+    description: 'Area cuci tangan tamu: wastafel, cermin dinding, sabun, dan pembersihan baby chair.',
+    standardChecklist: [
+      'Wastafel customer disikat bersih, bebas kerak/busa sabun & saluran lancar',
+      'Cermin dilap bening mengkilap tanpa bekas cipratan air atau sidik jari',
+      'Dispenser sabun cuci tangan terisi penuh & lap/tisu tangan tersedia',
+      'Baby chair disemprot sanitizer, diseka higienis, dan disusun rapi'
+    ],
+    color: 'from-cyan-400 to-teal-500'
+  },
+  {
+    id: 'area-showcase',
+    name: 'Showcase depan belakang (air, kaca, dalam showcase, kontainer ayam) + Sawang',
+    code: 'HARA-SHW-01',
     category: 'Kitchen',
-    description: 'Pembersihan minyak sisa, filter remahan tepung, meja stainless, dan bagian luar mesin fryer.',
+    description: 'Showcase penghangat ayam depan & belakang, wadah air, rak dalam, kontainer ayam, dan pembersihan sawang plafon.',
     standardChecklist: [
-      'Remahan tepung crispy disaring dan dibersihkan dari meja',
-      'Permukaan stainless steel diseka dengan lap degreaser',
-      'Lantai dapur penggorengan kering & tidak ada tumpahan licin minyak',
-      'Peralatan penjepit dan peniris tersusun rapi'
-    ],
-    color: 'from-amber-500 to-orange-600'
-  },
-  {
-    id: 'cashier-counter',
-    name: 'Meja Kasir & Front Counter',
-    code: 'HARA-CSR-01',
-    category: 'Service',
-    description: 'Area kasir, mesin POS, etalase pemanas ayam (warmer), dan meja saus kemasan.',
-    standardChecklist: [
-      'Kaca etalase warmer bersih tanpa bekas sidik jari / minyak',
-      'Meja kasir & mesin POS bersih dari remah & struk berserakan',
-      'Wadah sedotan, sendok, dan saus tertata penuh & rapi',
-      'Lantai area kasir bersih dan kering'
-    ],
-    color: 'from-red-500 to-rose-600'
-  },
-  {
-    id: 'dining-hall',
-    name: 'Area Meja Tamu (Dining Hall)',
-    code: 'HARA-DIN-01',
-    category: 'Service',
-    description: 'Seluruh meja makan pelanggan, kursi, lantai dining room, dan tempat sampah pengunjung.',
-    standardChecklist: [
-      'Semua meja disemprot sanitizer dan dilap kering mengkilap',
-      'Kursi tertata sejajar merapat ke meja',
-      'Lantai dining telah disapu & dipel wangi tanpa noda makanan',
-      'Tempat sampah tamu tidak penuh & kantong plastik baru dipasang'
+      'Kaca showcase depan & belakang dilap jernih tanpa noda minyak & sidik jari',
+      'Air penampung kelembapan showcase diganti dan dikuras bersih',
+      'Bagian dalam showcase & rak pemanas diseka steril',
+      'Kontainer ayam dicuci bersih, ditiriskan, dan disusun rapi',
+      'Sawang (sarang laba-laba/debu langit-langit & sudut dinding) dibersihkan tuntas'
     ],
     color: 'from-blue-500 to-indigo-600'
   },
   {
-    id: 'dishwashing-waste',
-    name: 'Area Cuci Piring & Waste',
-    code: 'HARA-WST-01',
-    category: 'Kitchen',
-    description: 'Sink pencucian piring/tray, rak pengeringan, grease trap, dan area tempat sampah dapur.',
-    standardChecklist: [
-      'Bak cuci sink bersih bebas tumpukan piring & sisa makanan',
-      'Grease trap disaring dan dibersihkan dari lemak',
-      'Lantai area cuci disikat dan ditarik airnya (kering)',
-      'Tempat sampah basah dapur sudah diikat dan dibuang ke bak luar'
-    ],
-    color: 'from-emerald-500 to-teal-600'
-  },
-  {
-    id: 'restroom',
-    name: 'Toilet & Wastafel Tamu',
-    code: 'HARA-TOI-01',
+    id: 'area-toilet-mushola',
+    name: 'Toilet + Mushola + Meja Area Takeaway (Termasuk Bawahnya)',
+    code: 'HARA-FAC-01',
     category: 'Facility',
-    description: 'Kloset, cermin, wastafel cuci tangan, sabun cuci tangan, dan lantai toilet.',
+    description: 'Toilet tamu/kru, kenyamanan mushola, dan meja takeaway beserta lantai kolong bawahnya.',
     standardChecklist: [
-      'Wastafel bersih tidak tersumbat & sabun cuci tangan terisi',
-      'Cermin dilap bersih tidak ada cipratan air',
-      'Kloset disikat bersih dan disiram pewangi toilet',
-      'Lantai toilet disikat kering tidak berlendir & tempat sampah bersih'
+      'Kloset, dinding & lantai toilet disikat wangi, tidak licin & tempat sampah dibuang',
+      'Mushola (karpet/sajadah) divakum/dikebas, mukena dilipat rapi & wangi',
+      'Meja area takeaway dilap bersih dan disanitasi',
+      'Kolong bawah meja takeaway disapu & dipel bersih tanpa sisa struk/debu'
     ],
-    color: 'from-cyan-500 to-blue-600'
+    color: 'from-fuchsia-500 to-pink-600'
   },
   {
-    id: 'storage-chiller',
-    name: 'Gudang Bahan Baku & Chiller',
-    code: 'HARA-GUD-01',
-    category: 'Storage',
-    description: 'Rak penyimpanan packaging kardus Hara Chicken, bumbu marinasi, dan freezer/chiller ayam.',
+    id: 'area-rak-kitchen',
+    name: 'Rak Bahan Baku + Wastafel Kitchen + Area Gas Cooker',
+    code: 'HARA-KTN-01',
+    category: 'Kitchen',
+    description: 'Penataan stok rak bahan baku, bak cuci piring/peralatan kitchen, dan area kompor gas cooker.',
     standardChecklist: [
-      'Kardus packaging tersusun rapi di atas pallet (tidak menyentuh lantai)',
-      'Pintu chiller/freezer tertutup rapat dan karet kulkas bersih',
-      'Sistem FIFO diterapkan untuk stok bahan baku',
-      'Lantai gudang bebas debu dan ceceran bahan'
+      'Rak bahan baku tertata rapi sistem FIFO (kardus packaging tidak langsung di lantai)',
+      'Wastafel kitchen disikat bersih, bebas sisa lemak & grease trap disaring',
+      'Area gas cooker / kompor diseka dari kerak bumbu, tepung, & cipratan minyak',
+      'Lantai dapur di sekitar gas cooker kering dan tidak licin'
     ],
-    color: 'from-purple-500 to-indigo-600'
+    color: 'from-orange-500 to-amber-600'
+  },
+  {
+    id: 'area-sealcup-geprek',
+    name: 'Seal Cup + Dispenser + Cermin Dine In + Area geprek',
+    code: 'HARA-GRP-01',
+    category: 'Service',
+    description: 'Mesin cup sealer minuman, dispenser sirup/es, cermin area makan tamu, dan meja/alat area geprek.',
+    standardChecklist: [
+      'Mesin seal cup dibersihkan dari ceceran manis dan plastik sealer terpasang rapi',
+      'Dispenser minuman diseka bersih wadah luar dan tatakan tetesannya',
+      'Cermin dinding area dine-in dilap mengkilap bebas debu & bercak',
+      'Meja & cobek/alat area geprek dicuci bersih, disanitasi, dan bebas sisa sambal'
+    ],
+    color: 'from-purple-600 to-indigo-700'
   }
 ];
 
+// Daftar Kru Hara Chicken Resmi (Kepala Outlet: Ummu Sallaamah)
 export const DEFAULT_CREW: CrewMember[] = [
-  { id: 'crew-1', name: 'Rian Pratama', role: 'Crew Kitchen', phone: '081234567890', active: true },
-  { id: 'crew-2', name: 'Siti Nurhaliza', role: 'Crew Cashier', phone: '081234567891', active: true },
-  { id: 'crew-3', name: 'Budi Santoso', role: 'Crew Dining', phone: '081234567892', active: true },
-  { id: 'crew-4', name: 'Dewi Lestari', role: 'Crew Kitchen', phone: '081234567893', active: true },
-  { id: 'crew-5', name: 'Fajar Hidayat', role: 'Crew Dining', phone: '081234567894', active: true },
-  { id: 'crew-6', name: 'Pak Hendra (SPV)', role: 'Supervisor', phone: '081234567895', active: true },
+  { id: 'crew-ummu', name: 'Ummu Sallaamah', role: 'Kepala Outlet', phone: '081234567801', active: true },
+  { id: 'crew-bangkit', name: 'Bangkit Tri Widodo', role: 'Crew Kitchen', phone: '081234567802', active: true },
+  { id: 'crew-jeki', name: 'Jeki Tri Hidayatuloh', role: 'Crew Kitchen', phone: '081234567803', active: true },
+  { id: 'crew-isnaini', name: 'Isnaini Nur Ramadhani', role: 'Crew Cashier', phone: '081234567804', active: true },
+  { id: 'crew-anisa', name: 'Anisa Wulandari', role: 'Crew Cashier', phone: '081234567805', active: true },
+  { id: 'crew-fitriana', name: 'Fitriana Washilatun Sholikhah', role: 'Crew Dining', phone: '081234567806', active: true },
+  { id: 'crew-robi', name: 'Robi Chaniago', role: 'Crew Kitchen', phone: '081234567807', active: true }
 ];
 
 export const getTodayDateString = (): string => {
@@ -120,12 +124,12 @@ export const getDefaultSchedules = (): PiketSchedule[] => {
       date: today,
       shift: 'Pagi (08:00 - 15:00)',
       assignments: [
-        { areaId: 'fryer-station', crewId: 'crew-1', crewName: 'Rian Pratama' },
-        { areaId: 'cashier-counter', crewId: 'crew-2', crewName: 'Siti Nurhaliza' },
-        { areaId: 'dining-hall', crewId: 'crew-3', crewName: 'Budi Santoso' },
-        { areaId: 'dishwashing-waste', crewId: 'crew-1', crewName: 'Rian Pratama' },
-        { areaId: 'restroom', crewId: 'crew-3', crewName: 'Budi Santoso' },
-        { areaId: 'storage-chiller', crewId: 'crew-4', crewName: 'Dewi Lestari' }
+        { areaId: 'area-halaman', crewId: 'crew-bangkit', crewName: 'Bangkit Tri Widodo' },
+        { areaId: 'area-wastafel-cust', crewId: 'crew-anisa', crewName: 'Anisa Wulandari' },
+        { areaId: 'area-showcase', crewId: 'crew-jeki', crewName: 'Jeki Tri Hidayatuloh' },
+        { areaId: 'area-toilet-mushola', crewId: 'crew-fitriana', crewName: 'Fitriana Washilatun Sholikhah' },
+        { areaId: 'area-rak-kitchen', crewId: 'crew-robi', crewName: 'Robi Chaniago' },
+        { areaId: 'area-sealcup-geprek', crewId: 'crew-isnaini', crewName: 'Isnaini Nur Ramadhani' }
       ]
     },
     {
@@ -133,12 +137,12 @@ export const getDefaultSchedules = (): PiketSchedule[] => {
       date: today,
       shift: 'Sore / Closing (15:00 - 22:30)',
       assignments: [
-        { areaId: 'fryer-station', crewId: 'crew-4', crewName: 'Dewi Lestari' },
-        { areaId: 'cashier-counter', crewId: 'crew-2', crewName: 'Siti Nurhaliza' },
-        { areaId: 'dining-hall', crewId: 'crew-5', crewName: 'Fajar Hidayat' },
-        { areaId: 'dishwashing-waste', crewId: 'crew-4', crewName: 'Dewi Lestari' },
-        { areaId: 'restroom', crewId: 'crew-5', crewName: 'Fajar Hidayat' },
-        { areaId: 'storage-chiller', crewId: 'crew-1', crewName: 'Rian Pratama' }
+        { areaId: 'area-halaman', crewId: 'crew-robi', crewName: 'Robi Chaniago' },
+        { areaId: 'area-wastafel-cust', crewId: 'crew-isnaini', crewName: 'Isnaini Nur Ramadhani' },
+        { areaId: 'area-showcase', crewId: 'crew-bangkit', crewName: 'Bangkit Tri Widodo' },
+        { areaId: 'area-toilet-mushola', crewId: 'crew-jeki', crewName: 'Jeki Tri Hidayatuloh' },
+        { areaId: 'area-rak-kitchen', crewId: 'crew-anisa', crewName: 'Anisa Wulandari' },
+        { areaId: 'area-sealcup-geprek', crewId: 'crew-fitriana', crewName: 'Fitriana Washilatun Sholikhah' }
       ]
     }
   ];
@@ -147,72 +151,72 @@ export const getDefaultSchedules = (): PiketSchedule[] => {
 export const INITIAL_RECORDS: PiketRecord[] = [
   {
     id: 'piket-demo-01',
-    timestamp: new Date(Date.now() - 3600000 * 3).toISOString(),
+    timestamp: new Date(Date.now() - 3600000 * 2.5).toISOString(),
     date: getTodayDateString(),
     time: '11:15',
-    areaId: 'cashier-counter',
-    areaName: 'Meja Kasir & Front Counter',
-    areaCode: 'HARA-CSR-01',
-    crewName: 'Siti Nurhaliza',
-    crewId: 'crew-2',
+    areaId: 'area-wastafel-cust',
+    areaName: 'Wastafel Customer + Cermin + Baby Chair',
+    areaCode: 'HARA-WST-02',
+    crewName: 'Anisa Wulandari',
+    crewId: 'crew-anisa',
     shift: 'Pagi (08:00 - 15:00)',
-    photoBase64: 'https://images.unsplash.com/photo-1556740738-b6a63e27c4df?auto=format&fit=crop&w=600&q=80',
+    photoBase64: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80',
     aiVerification: {
       status: 'BERSIH_SESUAI_STANDAR',
       isCorrectArea: true,
-      detectedAreaDescription: 'Meja kasir depan dan etalase showcase rapi.',
-      summary: 'Area kasir sangat bersih, monitor POS dan display rapi tanpa ceceran remah makanan.',
+      detectedAreaDescription: 'Wastafel customer bersih dan cermin mengkilap.',
+      summary: 'Area wastafel dan cermin customer bersih terawat, sabun terisi, dan baby chair tertata rapi.',
       findings: [
-        'Etalase kaca tampak bening dan bebas noda minyak',
-        'Area meja kasir kering dan bersih',
-        'Struk dan nota tersimpan di tempatnya'
+        'Wastafel bersih bebas busa & kotoran',
+        'Cermin dilap jernih tanpa bekas sidik jari',
+        'Baby chair telah disanitasi'
       ],
       checkItems: [
-        { item: 'Kaca Etalase Warmer', isClean: true, notes: 'Bening dan terawat' },
-        { item: 'Permukaan Meja POS', isClean: true, notes: 'Bebas kotoran' },
-        { item: 'Kerapian Wadah Saus & Sendok', isClean: true, notes: 'Tertata rapi' }
+        { item: 'Wastafel Customer', isClean: true, notes: 'Bersih & saluran lancar' },
+        { item: 'Cermin Dinding', isClean: true, notes: 'Bening mengkilap' },
+        { item: 'Baby Chair', isClean: true, notes: 'Telah disanitasi rapi' }
       ],
       verifiedAt: '11:15'
     },
     spvStatus: 'APPROVED',
-    spvNotes: 'Bagus dan konsisten.',
-    spvApprovedBy: 'Pak Hendra (SPV)',
+    spvNotes: 'Sangat baik, pertahankan kebersihan area tamu.',
+    spvApprovedBy: 'Ummu Sallaamah (Kepala Outlet)',
     spvApprovedAt: '11:30',
     syncedToSheets: true,
     syncedAt: '11:16'
   },
   {
     id: 'piket-demo-02',
-    timestamp: new Date(Date.now() - 3600000 * 1.5).toISOString(),
+    timestamp: new Date(Date.now() - 3600000 * 1).toISOString(),
     date: getTodayDateString(),
     time: '12:45',
-    areaId: 'fryer-station',
-    areaName: 'Area Penggorengan & Fryer',
-    areaCode: 'HARA-FRY-01',
-    crewName: 'Rian Pratama',
-    crewId: 'crew-1',
+    areaId: 'area-showcase',
+    areaName: 'Showcase depan belakang (air, kaca, dalam showcase, kontainer ayam) + Sawang',
+    areaCode: 'HARA-SHW-01',
+    crewName: 'Jeki Tri Hidayatuloh',
+    crewId: 'crew-jeki',
     shift: 'Pagi (08:00 - 15:00)',
-    photoBase64: 'https://images.unsplash.com/photo-1590794056226-79ef3a8147e1?auto=format&fit=crop&w=600&q=80',
+    photoBase64: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=600&q=80',
     aiVerification: {
       status: 'BERSIH_SESUAI_STANDAR',
       isCorrectArea: true,
-      detectedAreaDescription: 'Stasiun penggorengan stainless steel dapur utama.',
-      summary: 'Tepung sisa telah disaring, meja stainless steel bersih diseka, dan peniris ayam tertata.',
+      detectedAreaDescription: 'Showcase penghangat ayam dan kaca depan-belakang bersih steril.',
+      summary: 'Kaca showcase bening, air penampung diganti baru, dan kontainer ayam tersusun rapi.',
       findings: [
-        'Tidak ada genangan minyak di bawah meja penggorengan',
-        'Peralatan peniris ayam tersusun di rak atas',
-        'Permukaan dinding percikan minyak sudah dilap'
+        'Kaca showcase bebas minyak dan sidik jari',
+        'Kontainer ayam bersih kering di posisinya',
+        'Sawang di sekitar plafon showcase sudah dibersihkan'
       ],
       checkItems: [
-        { item: 'Saringan Tepung Crispy', isClean: true, notes: 'Sudah disaring bersih' },
-        { item: 'Permukaan Stainless Steel', isClean: true, notes: 'Disapu & diseka degreaser' },
-        { item: 'Lantai Dapur Fryer', isClean: true, notes: 'Kering dan tidak licin' }
+        { item: 'Kaca Depan & Belakang', isClean: true, notes: 'Jernih tanpa minyak' },
+        { item: 'Air Showcase', isClean: true, notes: 'Segar dan higienis' },
+        { item: 'Kontainer Ayam & Sawang', isClean: true, notes: 'Tertata dan bersih' }
       ],
       verifiedAt: '12:45'
     },
     spvStatus: 'APPROVED',
-    spvNotes: 'Standar kebersihan kitchen terpenuhi.',
-    spvApprovedBy: 'Pak Hendra (SPV)',
+    spvNotes: 'Bagus, standar visual showcase terpenuhi.',
+    spvApprovedBy: 'Ummu Sallaamah (Kepala Outlet)',
     spvApprovedAt: '13:00',
     syncedToSheets: true,
     syncedAt: '12:46'

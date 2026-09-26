@@ -24,16 +24,16 @@ export const CrewHeader: React.FC<CrewHeaderProps> = ({ onOpenSPV }) => {
         <div className="flex items-center justify-between h-14">
           {/* Brand Logo & Name */}
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white font-bold text-sm tracking-tight">
-              PC
+            <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-white font-bold text-sm tracking-tight shadow-2xs">
+              HC
             </div>
             <div>
-              <span className="font-bold text-base text-slate-900 tracking-tight">Piket Cihuy</span>
-              <p className="text-[10px] text-slate-500 font-medium">Halaman Kru Outlet</p>
+              <span className="font-bold text-base text-slate-900 tracking-tight">Hara Chicken</span>
+              <p className="text-[10px] text-slate-500 font-medium">Piket Kru Outlet</p>
             </div>
           </div>
 
-          {/* Right Controls: Shift Switcher & SPV Portal Link */}
+          {/* Right Controls: Shift Switcher & Kepala Outlet Portal Link */}
           <div className="flex items-center gap-2">
             <button
               onClick={toggleShift}
@@ -49,7 +49,7 @@ export const CrewHeader: React.FC<CrewHeaderProps> = ({ onOpenSPV }) => {
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-colors cursor-pointer shadow-2xs"
             >
               <Lock className="w-3 h-3 text-slate-300" />
-              <span>Akses SPV</span>
+              <span>Kepala Outlet</span>
             </button>
           </div>
         </div>

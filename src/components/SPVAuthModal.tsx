@@ -83,8 +83,8 @@ export const SPVAuthModal: React.FC<SPVAuthModalProps> = ({ isOpen, onClose, onS
               <Lock className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Akses Pengawas (SPV)</h3>
-              <p className="text-[11px] text-slate-500">Piket Cihuy</p>
+              <h3 className="text-sm font-bold text-slate-900">Akses Kepala Outlet</h3>
+              <p className="text-[11px] text-emerald-700 font-semibold">Ummu Sallaamah • Hara Chicken</p>
             </div>
           </div>
           <button

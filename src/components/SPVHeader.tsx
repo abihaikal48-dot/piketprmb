@@ -28,8 +28,11 @@ export const SPVHeader: React.FC<SPVHeaderProps> = ({ spvTab, setSpvTab, onExitS
 
             <span className="text-slate-300">|</span>
 
-            <div>
-              <span className="font-bold text-sm text-slate-900">Dashboard SPV</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-sm text-slate-900">Portal Kepala Outlet</span>
+              <span className="hidden sm:inline-block text-[11px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                Ummu Sallaamah
+              </span>
             </div>
           </div>
 

@@ -205,19 +205,19 @@ CATATAN: JANGAN MEMBERIKAN SKOR ANGKA. Gunakan bahasa Indonesia yang tegas, prof
     return res.status(200).json({
       status: 'PERLU_TINDAKLANJUT',
       isCorrectArea: false,
-      detectedAreaDescription: 'Memerlukan konfirmasi visual fisik langsung oleh SPV',
+      detectedAreaDescription: 'Memerlukan konfirmasi visual langsung oleh Kepala Outlet',
       summary: isCapacityIssue
-        ? 'Layanan AI Gemini Google sedang mengalami antrean padat sementara (503). Foto bukti telah disimpan dengan aman dan diteruskan untuk verifikasi langsung oleh SPV.'
-        : 'Foto bukti belum dapat diverifikasi otomatis secara akurat. Pastikan foto diambil dengan pencahayaan terang tepat di area piket.',
+        ? 'Layanan AI Gemini sedang mengalami antrean padat sementara. Foto bukti telah disimpan dengan aman dan diteruskan untuk verifikasi langsung oleh Kepala Outlet (Ummu Sallaamah).'
+        : 'Foto bukti belum dapat diverifikasi otomatis. Pastikan foto diambil dengan pencahayaan terang tepat di area piket.',
       findings: [
         isCapacityIssue
           ? 'Server AI sedang dalam lonjakan trafik antrean sementara'
           : 'Pastikan kamera mengarah tepat ke area kerja dan peralatan piket',
-        'Foto bukti fisik kebersihan telah didokumentasikan di sistem',
-        'Laporan piket menunggu konfirmasi inspeksi langsung oleh SPV'
+        'Foto bukti fisik kebersihan telah didokumentasikan di database sistem',
+        'Laporan piket menunggu konfirmasi inspeksi langsung oleh Kepala Outlet (Ummu Sallaamah)'
       ],
       checkItems: [
-        { item: 'Kesesuaian Area', isClean: false, notes: 'Menunggu SPV' }
+        { item: 'Kesesuaian Area', isClean: false, notes: 'Menunggu Kepala Outlet (Ummu Sallaamah)' }
       ],
       verifiedAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
     });

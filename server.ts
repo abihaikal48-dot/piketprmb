@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 dotenv.config();
@@ -20,10 +21,6 @@ app.use(express.json({ limit: '50mb' }));
 // Initialized Gemini AI client
 const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : new GoogleGenAI();
-
-// In-memory store for server-persisted records
-let piketRecords: any[] = [];
-let piketRosters: any[] = [];
 
 // API: AI Vision Cleaning Verification
 app.post('/api/verify-cleaning', async (req, res) => {
@@ -214,7 +211,46 @@ CATATAN: JANGAN MEMBERIKAN SKOR ANGKA. Gunakan bahasa Indonesia yang tegas, prof
   }
 });
 
-// Piket records endpoints
+// File persistence paths
+const STORE_FILE = path.join(__dirname, '.piket_records.json');
+const CONFIG_FILE = path.join(__dirname, '.piket_config.json');
+
+// In-memory store for server-persisted records with disk backup
+let piketRecords: any[] = [];
+try {
+  if (fs.existsSync(STORE_FILE)) {
+    piketRecords = JSON.parse(fs.readFileSync(STORE_FILE, 'utf-8'));
+  }
+} catch (e) {
+  piketRecords = [];
+}
+
+let sharedConfig: any = null;
+try {
+  if (fs.existsSync(CONFIG_FILE)) {
+    sharedConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+  }
+} catch (e) {
+  sharedConfig = null;
+}
+
+const saveStore = () => {
+  try {
+    fs.writeFileSync(STORE_FILE, JSON.stringify(piketRecords.slice(0, 150), null, 2));
+  } catch (e) {
+    console.error('Error saving records to disk:', e);
+  }
+};
+
+const saveConfig = () => {
+  try {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(sharedConfig, null, 2));
+  } catch (e) {
+    console.error('Error saving config to disk:', e);
+  }
+};
+
+// Piket records endpoints for multi-device synchronization
 app.get('/api/piket/records', (req, res) => {
   res.json({ records: piketRecords });
 });
@@ -224,7 +260,12 @@ app.post('/api/piket/records', (req, res) => {
   if (!newRecord.id) {
     newRecord.id = 'piket-' + Date.now();
   }
-  piketRecords.unshift(newRecord);
+  // Avoid duplicate if already exists
+  const exists = piketRecords.some(r => r.id === newRecord.id);
+  if (!exists) {
+    piketRecords.unshift(newRecord);
+    saveStore();
+  }
   res.json({ success: true, record: newRecord });
 });
 
@@ -234,9 +275,21 @@ app.patch('/api/piket/records/:id', (req, res) => {
   const index = piketRecords.findIndex(r => r.id === id);
   if (index !== -1) {
     piketRecords[index] = { ...piketRecords[index], ...updates };
+    saveStore();
     return res.json({ success: true, record: piketRecords[index] });
   }
   res.status(404).json({ error: 'Record not found' });
+});
+
+// Shared Google Sheets config endpoint (syncs webhook URL across all phones & computers)
+app.get('/api/piket/config', (req, res) => {
+  res.json({ config: sharedConfig });
+});
+
+app.post('/api/piket/config', (req, res) => {
+  sharedConfig = req.body;
+  saveConfig();
+  res.json({ success: true, config: sharedConfig });
 });
 
 // Dev vs Prod Vite Mounting

@@ -81,20 +81,20 @@ function MainApp() {
           {/* Minimalist Crew Footer */}
           <footer className="bg-white border-t border-slate-200 py-3.5 px-4 text-center text-xs text-slate-400 no-print">
             <div className="max-w-3xl mx-auto flex items-center justify-between text-[11px]">
-              <span>Piket Cihuy • Sistem Piket Kru</span>
+              <span>Hara Chicken • Sistem Piket Kru</span>
               <button
                 onClick={() => handleOpenSPV('dashboard')}
                 className="hover:text-slate-700 flex items-center gap-1 font-medium"
               >
                 <Lock className="w-3 h-3 text-slate-400" />
-                <span>Portal SPV</span>
+                <span>Portal Kepala Outlet</span>
               </button>
             </div>
           </footer>
         </>
       )}
 
-      {/* 2. SEPARATED PAGE: SPV MANAGEMENT & DASHBOARD PORTAL */}
+      {/* 2. SEPARATED PAGE: KEPALA OUTLET MANAGEMENT & DASHBOARD PORTAL */}
       {currentPage === 'spv' && (
         <>
           <SPVHeader
@@ -109,11 +109,11 @@ function MainApp() {
             {spvTab === 'stickers' && <QRStickerPrinter />}
           </main>
 
-          {/* SPV Portal Footer */}
+          {/* Kepala Outlet Portal Footer */}
           <footer className="bg-white border-t border-slate-200 py-4 px-4 text-center text-xs text-slate-500 no-print">
             <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
               <span className="font-semibold text-slate-700">
-                Portal Pengawas Piket Cihuy
+                Portal Kepala Outlet Hara Chicken • Ummu Sallaamah
               </span>
               <button
                 onClick={handleExitSPV}

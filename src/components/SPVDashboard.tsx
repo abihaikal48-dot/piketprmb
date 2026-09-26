@@ -26,7 +26,7 @@ import { usePiket } from '../context/PiketContext';
 import { PiketRecord } from '../types/piket';
 import { signInWithGoogle } from '../services/authService';
 import { AreaIcon } from './AreaIcon';
-import { GOOGLE_APPS_SCRIPT_CODE, testWebhookConnection } from '../services/sheetsService';
+import { GOOGLE_APPS_SCRIPT_CODE, testWebhookConnection, getRecordsTsvString } from '../services/sheetsService';
 
 interface SPVDashboardProps {
   onLockSPV?: () => void;
@@ -81,23 +81,9 @@ export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
   };
 
   const copyTableDataToClipboard = () => {
-    const headers = ['Waktu', 'Nama Kru', 'Shift', 'Area', 'Kode Area', 'Status AI', 'Ringkasan AI', 'Temuan AI', 'Status SPV', 'Catatan SPV', 'ID Laporan'];
-    const rows = records.map(r => [
-      `${r.date} ${r.time}`,
-      r.crewName,
-      r.shift,
-      r.areaName,
-      r.areaCode,
-      r.aiVerification?.status === 'BERSIH_SESUAI_STANDAR' ? 'BERSIH (STANDAR)' : 'PERLU TINDAK LANJUT',
-      r.aiVerification?.summary || '-',
-      (r.aiVerification?.findings || []).join('; ') || '-',
-      r.spvStatus === 'APPROVED' ? 'DISETUJUI SPV' : r.spvStatus === 'REVISION_NEEDED' ? 'PERLU REVISI' : 'PENDING',
-      r.spvNotes || '-',
-      r.id
-    ]);
-    const tsv = [headers.join('\t'), ...rows.map(row => row.join('\t'))].join('\n');
+    const tsv = getRecordsTsvString(records);
     navigator.clipboard.writeText(tsv);
-    setSyncToast('Semua baris data disalin! Buka Google Sheets dan tekan Ctrl+V');
+    setSyncToast('Semua baris data disalin rapi! Buka Google Sheets dan tekan Ctrl+V');
     setTimeout(() => setSyncToast(null), 3500);
   };
 
@@ -217,23 +203,44 @@ export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
   };
 
   const exportCSV = () => {
-    const headers = ['Waktu', 'Nama Kru', 'Shift', 'Area', 'Kode Area', 'Status AI', 'Ringkasan AI', 'Status SPV'];
-    const rows = filteredRecords.map(r => [
-      `"${r.date} ${r.time}"`,
-      `"${r.crewName}"`,
-      `"${r.shift}"`,
-      `"${r.areaName}"`,
-      `"${r.areaCode}"`,
-      `"${r.aiVerification.status}"`,
-      `"${r.aiVerification.summary.replace(/"/g, '""')}"`,
-      `"${r.spvStatus}"`
-    ]);
+    const headers = [
+      'Waktu & Tanggal',
+      'Shift',
+      'Area Piket',
+      'Kode Area',
+      'Petugas Kru',
+      'Status AI',
+      'Validasi Foto',
+      'Ringkasan AI',
+      'Detail Temuan AI',
+      'Status Kepala Outlet',
+      'Catatan Kepala Outlet (Ummu Sallaamah)',
+      'ID Laporan'
+    ];
+    const rows = filteredRecords.map(r => {
+      const isClean = r.aiVerification?.status === 'BERSIH_SESUAI_STANDAR';
+      const isCorrect = r.aiVerification?.isCorrectArea ?? true;
+      return [
+        `"${r.date} ${r.time}"`,
+        `"${r.shift}"`,
+        `"${r.areaName.replace(/"/g, '""')}"`,
+        `"${r.areaCode}"`,
+        `"${r.crewName}"`,
+        `"${isClean ? 'BERSIH (STANDAR)' : 'PERLU TINDAK LANJUT'}"`,
+        `"${isCorrect ? 'SESUAI AREA' : 'FOTO DITOLAK / TIDAK SESUAI'}"`,
+        `"${(r.aiVerification?.summary || '-').replace(/"/g, '""')}"`,
+        `"${(r.aiVerification?.findings?.join('; ') || '-').replace(/"/g, '""')}"`,
+        `"${r.spvStatus === 'APPROVED' ? 'DISETUJUI KEPALA OUTLET' : r.spvStatus === 'REVISION_NEEDED' ? 'PERLU REVISI' : 'PENDING'}"`,
+        `"${(r.spvNotes || '-').replace(/"/g, '""')}"`,
+        `"${r.id}"`
+      ];
+    });
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Piket_Cihuy_Log_${today}.csv`);
+    link.setAttribute('download', `Piket_HaraChicken_Log_${today}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -252,14 +259,17 @@ export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
         <div>
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-            Portal SPV & Kepala Outlet
-          </span>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight mt-0.5">
-            Monitoring Piket Cihuy
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+              Kepala Outlet: Ummu Sallaamah
+            </span>
+            <span className="text-[10px] font-semibold text-slate-500">• Hara Chicken</span>
+          </div>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight mt-1">
+            Monitoring Piket Outlet
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Pantau kepatuhan piket kru, verifikasi visual AI, dan database spreadsheet.
+            Pantau kepatuhan kebersihan 6 area piket, validasi AI visual, dan sinkronisasi Google Sheets realtime.
           </p>
         </div>
 
@@ -771,27 +781,50 @@ export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
                 </p>
               </div>
 
-              {/* SPV Actions */}
-              <div className="space-y-2 pt-1">
-                <span className="text-xs font-bold text-slate-800">Status Approval:</span>
-                <div className="flex gap-2">
+              {/* Kepala Outlet Actions */}
+              <div className="space-y-2 pt-2 border-t border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800">Verifikasi Kepala Outlet:</span>
+                  <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Ummu Sallaamah
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                    Catatan Evaluasi / Arahan:
+                  </label>
+                  <input
+                    type="text"
+                    value={spvNoteInput}
+                    onChange={(e) => setSpvNoteInput(e.target.value)}
+                    placeholder="Contoh: Sudah bersih dan higienis, pertahankan..."
+                    className="w-full text-xs p-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-1 focus:ring-slate-900 bg-white"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-1">
                   <button
                     onClick={() => {
                       updateRecordSPVStatus(selectedRecordForDetail.id, 'APPROVED', spvNoteInput);
-                      setSelectedRecordForDetail(prev => prev ? { ...prev, spvStatus: 'APPROVED' } : null);
+                      setSelectedRecordForDetail(prev => prev ? { ...prev, spvStatus: 'APPROVED', spvNotes: spvNoteInput } : null);
+                      setSpvNoteInput('');
                     }}
-                    className="flex-1 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800"
+                    className="flex-1 py-2.5 rounded-xl bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    Setujui Laporan
+                    <Check className="w-4 h-4 stroke-[3]" />
+                    <span>Setujui (Bersih)</span>
                   </button>
                   <button
                     onClick={() => {
                       updateRecordSPVStatus(selectedRecordForDetail.id, 'REVISION_NEEDED', spvNoteInput || 'Harap bersihkan ulang');
-                      setSelectedRecordForDetail(prev => prev ? { ...prev, spvStatus: 'REVISION_NEEDED' } : null);
+                      setSelectedRecordForDetail(prev => prev ? { ...prev, spvStatus: 'REVISION_NEEDED', spvNotes: spvNoteInput || 'Harap bersihkan ulang' } : null);
+                      setSpvNoteInput('');
                     }}
-                    className="flex-1 py-2 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50"
+                    className="flex-1 py-2.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 text-xs font-bold hover:bg-amber-100 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    Minta Revisi
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>Minta Bersihkan Ulang</span>
                   </button>
                 </div>
               </div>

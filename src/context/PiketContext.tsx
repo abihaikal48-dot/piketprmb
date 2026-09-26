@@ -63,31 +63,49 @@ const STORAGE_KEYS = {
 export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [areas] = useState<PiketArea[]>(DEFAULT_AREAS);
   
-  // Crew list
+  // Crew list with auto-migration to official Hara Chicken crew
   const [crewList, setCrewList] = useState<CrewMember[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.CREW);
-      return saved ? JSON.parse(saved) : DEFAULT_CREW;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.some((c: CrewMember) => c.name.includes('Ummu Sallaamah'))) {
+          return parsed;
+        }
+      }
+      return DEFAULT_CREW;
     } catch {
       return DEFAULT_CREW;
     }
   });
 
-  // Schedules
+  // Schedules with auto-migration to the 6 official areas
   const [schedules, setSchedules] = useState<PiketSchedule[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
-      return saved ? JSON.parse(saved) : getDefaultSchedules();
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].assignments?.some((a: any) => a.areaId === 'area-halaman')) {
+          return parsed;
+        }
+      }
+      return getDefaultSchedules();
     } catch {
       return getDefaultSchedules();
     }
   });
 
-  // Records
+  // Records with multi-device support
   const [records, setRecords] = useState<PiketRecord[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.RECORDS);
-      return saved ? JSON.parse(saved) : INITIAL_RECORDS;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+      return INITIAL_RECORDS;
     } catch {
       return INITIAL_RECORDS;
     }
@@ -100,10 +118,66 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [spreadsheetInfo, setSpreadsheetInfo] = useState<SpreadsheetInfo | null>(getSavedSpreadsheetInfo);
   const [googleUserEmail, setGoogleUserEmail] = useState<string | null>(null);
 
+  // Online Real-time Sync across all devices (Person A and Person B see identical state)
+  const syncWithServer = async () => {
+    try {
+      // 1. Fetch server records
+      const res = await fetch('/api/piket/records');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.records) && data.records.length > 0) {
+          setRecords(prev => {
+            const map = new Map<string, PiketRecord>();
+            // Add server records first
+            data.records.forEach((r: PiketRecord) => {
+              if (r && r.id) map.set(r.id, r);
+            });
+            // Keep local records not yet uploaded
+            prev.forEach(r => {
+              if (r && r.id && !map.has(r.id)) {
+                map.set(r.id, r);
+              }
+            });
+            return Array.from(map.values()).sort(
+              (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            );
+          });
+        }
+      }
+
+      // 2. Fetch shared Google Sheets config so all devices auto-connect
+      const cfgRes = await fetch('/api/piket/config');
+      if (cfgRes.ok) {
+        const cfgData = await cfgRes.json();
+        if (cfgData.config && cfgData.config.webhookUrl) {
+          setSpreadsheetInfo(prev => {
+            if (!prev || prev.webhookUrl !== cfgData.config.webhookUrl) {
+              return cfgData.config;
+            }
+            return prev;
+          });
+        }
+      }
+    } catch {
+      // Offline fallback: keep local data
+    }
+  };
+
+  useEffect(() => {
+    syncWithServer();
+    // Poll every 4 seconds to sync submissions between phones and computers
+    const interval = setInterval(syncWithServer, 4000);
+    const onFocus = () => syncWithServer();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, []);
+
   useEffect(() => {
     try {
-      // Store lightweight copy in localStorage (limit to last 25 records with truncated big images if needed)
-      const safeRecords = records.slice(0, 25).map(r => ({
+      const safeRecords = records.slice(0, 30).map(r => ({
         ...r,
         photoBase64: r.photoBase64 && r.photoBase64.length > 200000
           ? r.photoBase64.slice(0, 50) + '...'
@@ -111,7 +185,7 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }));
       localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(safeRecords));
     } catch (e) {
-      console.warn('LocalStorage quota limit reached, ignoring local persistence for heavy image records:', e);
+      console.warn('LocalStorage quota limit reached:', e);
     }
   }, [records]);
 
@@ -219,8 +293,8 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           return {
             ...r,
             spvStatus: status,
-            spvNotes: notes || (status === 'APPROVED' ? 'Disetujui SPV' : 'Perlu diseka ulang'),
-            spvApprovedBy: 'SPV Piket Cihuy',
+            spvNotes: notes || (status === 'APPROVED' ? 'Disetujui Kepala Outlet' : 'Perlu diseka ulang'),
+            spvApprovedBy: 'Ummu Sallaamah (Kepala Outlet)',
             spvApprovedAt: timeStr,
           };
         }
@@ -231,7 +305,12 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     fetch(`/api/piket/records/${recordId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ spvStatus: status, spvNotes: notes }),
+      body: JSON.stringify({
+        spvStatus: status,
+        spvNotes: notes || (status === 'APPROVED' ? 'Disetujui Kepala Outlet' : 'Perlu diseka ulang'),
+        spvApprovedBy: 'Ummu Sallaamah (Kepala Outlet)',
+        spvApprovedAt: timeStr,
+      }),
     }).catch(() => {});
   };
 
@@ -282,15 +361,26 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const connectGoogleSpreadsheet = async (token: string, email: string): Promise<SpreadsheetInfo> => {
-    const info = await createPiketSpreadsheet(token, 'Piket Cihuy');
+    const info = await createPiketSpreadsheet(token, 'Piket Hara Chicken');
     setSpreadsheetInfo(info);
     setGoogleUserEmail(email);
+    fetch('/api/piket/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(info),
+    }).catch(() => {});
     return info;
   };
 
   const connectWebhookSpreadsheet = (webhookUrl: string, sheetUrl?: string, title?: string): SpreadsheetInfo => {
     const info = saveWebhookConnection(webhookUrl, sheetUrl, title);
     setSpreadsheetInfo(info);
+    // Broadcast config to all devices online
+    fetch('/api/piket/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(info),
+    }).catch(() => {});
     return info;
   };
 

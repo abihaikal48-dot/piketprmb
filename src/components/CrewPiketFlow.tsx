@@ -250,11 +250,11 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({
           <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  Piket Cihuy • Shift {activeShift.split(' ')[0]}
+                <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                  Hara Chicken • Shift {activeShift.split(' ')[0]}
                 </span>
-                <h1 className="text-xl font-bold text-slate-900 tracking-tight mt-0.5">
-                  Lapor Piket Kebersihan
+                <h1 className="text-xl font-bold text-slate-900 tracking-tight mt-1">
+                  Lapor Piket Kebersihan Outlet
                 </h1>
                 <p className="text-xs text-slate-600 mt-1">
                   Scan QR code stiker di meja/area kerja, atau pilih area di bawah:
