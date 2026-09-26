@@ -18,12 +18,15 @@ import {
   Lock,
   Link as LinkIcon,
   Copy,
-  Plus
+  Plus,
+  Code2,
+  CheckCheck
 } from 'lucide-react';
 import { usePiket } from '../context/PiketContext';
 import { PiketRecord } from '../types/piket';
 import { signInWithGoogle } from '../services/authService';
 import { AreaIcon } from './AreaIcon';
+import { GOOGLE_APPS_SCRIPT_CODE, testWebhookConnection } from '../services/sheetsService';
 
 interface SPVDashboardProps {
   onLockSPV?: () => void;
@@ -56,9 +59,19 @@ export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [showWebhookSetup, setShowWebhookSetup] = useState(false);
-  const [webhookUrlInput, setWebhookUrlInput] = useState('');
+  const [webhookUrlInput, setWebhookUrlInput] = useState(spreadsheetInfo?.webhookUrl || '');
   const [showChangeSheetModal, setShowChangeSheetModal] = useState(false);
-  const [customSheetUrl, setCustomSheetUrl] = useState('');
+  const [customSheetUrl, setCustomSheetUrl] = useState(spreadsheetInfo?.url || '');
+  const [modalTab, setModalTab] = useState<'webhook' | 'copy' | 'link'>('webhook');
+  const [isTestingWebhook, setIsTestingWebhook] = useState(false);
+
+  const isRealtimeSyncActive = !!(spreadsheetInfo?.type === 'webhook' && spreadsheetInfo.webhookUrl);
+
+  const copyScriptToClipboard = () => {
+    navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_CODE);
+    setSyncToast('Kode Google Apps Script disalin ke clipboard!');
+    setTimeout(() => setSyncToast(null), 3000);
+  };
 
   const copyHeadersToClipboard = () => {
     const headerText = "Waktu Kirim (WIB)\tNama Kru\tShift\tArea Piket\tKode Area\tStatus Verifikasi AI\tRingkasan AI\tTemuan Detail AI\tStatus SPV\tCatatan SPV\tID Laporan";
@@ -67,13 +80,67 @@ export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
     setTimeout(() => setSyncToast(null), 3000);
   };
 
+  const copyTableDataToClipboard = () => {
+    const headers = ['Waktu', 'Nama Kru', 'Shift', 'Area', 'Kode Area', 'Status AI', 'Ringkasan AI', 'Temuan AI', 'Status SPV', 'Catatan SPV', 'ID Laporan'];
+    const rows = records.map(r => [
+      `${r.date} ${r.time}`,
+      r.crewName,
+      r.shift,
+      r.areaName,
+      r.areaCode,
+      r.aiVerification?.status === 'BERSIH_SESUAI_STANDAR' ? 'BERSIH (STANDAR)' : 'PERLU TINDAK LANJUT',
+      r.aiVerification?.summary || '-',
+      (r.aiVerification?.findings || []).join('; ') || '-',
+      r.spvStatus === 'APPROVED' ? 'DISETUJUI SPV' : r.spvStatus === 'REVISION_NEEDED' ? 'PERLU REVISI' : 'PENDING',
+      r.spvNotes || '-',
+      r.id
+    ]);
+    const tsv = [headers.join('\t'), ...rows.map(row => row.join('\t'))].join('\n');
+    navigator.clipboard.writeText(tsv);
+    setSyncToast('Semua baris data disalin! Buka Google Sheets dan tekan Ctrl+V');
+    setTimeout(() => setSyncToast(null), 3500);
+  };
+
+  const handleTestWebhook = async () => {
+    const url = webhookUrlInput.trim();
+    if (!url) {
+      setSyncToast('Masukkan URL Webhook Apps Script terlebih dahulu!');
+      setTimeout(() => setSyncToast(null), 3000);
+      return;
+    }
+    setIsTestingWebhook(true);
+    try {
+      await testWebhookConnection(url);
+      setSyncToast('1 Baris tes berhasil dikirim ke Google Spreadsheet!');
+      setTimeout(() => setSyncToast(null), 3500);
+    } catch (err: any) {
+      setSyncToast('Gagal mengirim data uji coba ke Webhook.');
+      setTimeout(() => setSyncToast(null), 3500);
+    } finally {
+      setIsTestingWebhook(false);
+    }
+  };
+
+  const handleSaveWebhookConnection = (e: React.FormEvent) => {
+    e.preventDefault();
+    const webhook = webhookUrlInput.trim();
+    if (!webhook) {
+      setSyncToast('Masukkan URL Webhook Apps Script.');
+      setTimeout(() => setSyncToast(null), 3000);
+      return;
+    }
+    connectWebhookSpreadsheet(webhook, customSheetUrl.trim() || undefined);
+    setShowChangeSheetModal(false);
+    setSyncToast('Auto-Sync Google Spreadsheet aktif!');
+    setTimeout(() => setSyncToast(null), 3000);
+  };
+
   const handleSaveDirectSheet = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customSheetUrl.trim()) return;
     setDirectSpreadsheetLink(customSheetUrl.trim());
     setShowChangeSheetModal(false);
-    setCustomSheetUrl('');
-    setSyncToast('Link Google Spreadsheet berhasil diperbarui!');
+    setSyncToast('Tautan Google Spreadsheet disimpan!');
     setTimeout(() => setSyncToast(null), 3000);
   };
 
@@ -257,152 +324,251 @@ export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
         </div>
       </div>
 
-      {/* Google Sheets Connection Card (Clean & Simple) */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      {/* Google Sheets Connection Card */}
+      <div className={`p-4 sm:p-5 rounded-2xl border shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${
+        isRealtimeSyncActive
+          ? 'bg-emerald-50/60 border-emerald-200'
+          : 'bg-white border-slate-200'
+      }`}>
+        <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <FileSpreadsheet className={`w-4 h-4 ${isRealtimeSyncActive ? 'text-emerald-700' : 'text-slate-600'}`} />
             <h3 className="text-sm font-bold text-slate-900">
-              {isSheetsConnected ? spreadsheetInfo?.title || 'Google Spreadsheet Terhubung' : 'Google Spreadsheet Outlet'}
+              {spreadsheetInfo?.title || 'Google Spreadsheet Outlet'}
             </h3>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+              isRealtimeSyncActive
+                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                : 'bg-amber-100 text-amber-800 border-amber-300'
+            }`}>
+              {isRealtimeSyncActive ? 'Auto-Sync Realtime Aktif' : 'Belum Auto-Sync Realtime'}
+            </span>
           </div>
-          <p className="text-xs text-slate-500 mt-1 max-w-lg">
-            {isSheetsConnected
-              ? 'Data piket dan hasil verifikasi AI otomatis disinkronkan ke Google Spreadsheet.'
-              : 'Sambungkan Google Spreadsheet agar data piket tersimpan dan mudah diaudit.'}
+          <p className="text-xs text-slate-600 max-w-xl">
+            {isRealtimeSyncActive
+              ? 'Setiap kali kru mengirim hasil piket & AI, data langsung otomatis bertambah ke baris Google Spreadsheet secara realtime.'
+              : 'Aktifkan Webhook Google Apps Script agar setiap laporan kru otomatis tersimpan ke baris Google Spreadsheet Anda tanpa repot.'}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {isSheetsConnected && spreadsheetInfo ? (
-            <>
-              <a
-                href={spreadsheetInfo.url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors shadow-2xs"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Buka Spreadsheet</span>
-              </a>
+          {spreadsheetInfo?.url && (
+            <a
+              href={spreadsheetInfo.url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 font-bold text-xs transition-colors shadow-2xs"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+              <span>Buka Sheet</span>
+            </a>
+          )}
 
-              <button
-                onClick={() => setShowChangeSheetModal(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-xs transition-colors"
-                title="Ganti atau masukkan link Google Spreadsheet sendiri"
-              >
-                <LinkIcon className="w-3.5 h-3.5 text-slate-500" />
-                <span>Ganti Link</span>
-              </button>
+          <button
+            onClick={() => {
+              setModalTab('webhook');
+              setShowChangeSheetModal(true);
+            }}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs transition-colors shadow-2xs ${
+              isRealtimeSyncActive
+                ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                : 'bg-slate-900 hover:bg-slate-800 text-white'
+            }`}
+          >
+            <LinkIcon className="w-3.5 h-3.5" />
+            <span>{isRealtimeSyncActive ? 'Pengaturan Auto-Sync' : 'Hubungkan Auto-Sync (1 Menit)'}</span>
+          </button>
 
-              <button
-                onClick={copyHeadersToClipboard}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-medium text-xs transition-colors"
-                title="Salin 11 nama kolom header untuk ditempel di spreadsheet baru"
-              >
-                <Copy className="w-3 h-3 text-slate-400" />
-                <span>Salin Kolom</span>
-              </button>
+          <button
+            onClick={copyTableDataToClipboard}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-colors"
+            title="Salin seluruh baris tabel untuk ditempel langsung (Ctrl+V) di Google Sheets"
+          >
+            <Copy className="w-3.5 h-3.5 text-slate-400" />
+            <span>Salin Data (Ctrl+V)</span>
+          </button>
 
-              {unsyncedCount > 0 && (
-                <button
-                  disabled={isSyncingAll}
-                  onClick={handleSyncAll}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingAll ? 'animate-spin' : ''}`} />
-                  <span>Sync ({unsyncedCount})</span>
-                </button>
-              )}
-            </>
-          ) : (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowChangeSheetModal(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-2xs transition-colors"
-              >
-                <LinkIcon className="w-3.5 h-3.5" />
-                <span>Sambungkan Spreadsheet</span>
-              </button>
-            </div>
+          {isRealtimeSyncActive && unsyncedCount > 0 && (
+            <button
+              disabled={isSyncingAll}
+              onClick={handleSyncAll}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-semibold text-xs transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingAll ? 'animate-spin' : ''}`} />
+              <span>Sync Ulang ({unsyncedCount})</span>
+            </button>
           )}
         </div>
       </div>
 
-      {/* Modal: Ganti Link Google Spreadsheet */}
+      {/* Modal: Pengaturan Google Spreadsheet & Auto-Sync */}
       {showChangeSheetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl border border-slate-200">
+          <div className="bg-white w-full max-w-lg rounded-2xl p-5 sm:p-6 shadow-xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                <h3 className="text-sm font-bold text-slate-900">Sambungkan Google Spreadsheet</h3>
+                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Pengaturan Google Spreadsheet</h3>
+                  <p className="text-[11px] text-slate-500">Pilih metode sinkronisasi data piket ke Google Sheets</p>
+                </div>
               </div>
-              <button onClick={() => setShowChangeSheetModal(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowChangeSheetModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="mt-3 space-y-3 text-xs text-slate-600">
-              <p>
-                Masukkan link Google Spreadsheet Anda (bebas, langsung terhubung tanpa repot otorisasi):
-              </p>
+            {/* Modal Tabs */}
+            <div className="flex border-b border-slate-200 mt-4 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setModalTab('webhook')}
+                className={`py-2 px-3 border-b-2 flex items-center gap-1.5 transition-colors ${
+                  modalTab === 'webhook'
+                    ? 'border-emerald-600 text-emerald-700 font-bold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Code2 className="w-3.5 h-3.5" />
+                <span>Auto-Sync Realtime (Apps Script)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('copy')}
+                className={`py-2 px-3 border-b-2 flex items-center gap-1.5 transition-colors ${
+                  modalTab === 'copy'
+                    ? 'border-emerald-600 text-emerald-700 font-bold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Salin Cepat (1 Klik)</span>
+              </button>
+            </div>
 
-              <form onSubmit={handleSaveDirectSheet} className="space-y-3 pt-1">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Link / ID Google Spreadsheet:
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="https://docs.google.com/spreadsheets/d/.../edit"
-                    value={customSheetUrl}
-                    onChange={(e) => setCustomSheetUrl(e.target.value)}
-                    className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-900 bg-white"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Atau buat sheet baru di Google Drive:{" "}
-                    <a
-                      href="https://docs.google.com/spreadsheets/u/0/create"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-slate-900 font-bold underline"
-                    >
-                      Buka Google Sheets Baru
-                    </a>
+            {/* Tab 1: Webhook Auto-Sync (Recommended) */}
+            {modalTab === 'webhook' && (
+              <div className="mt-4 space-y-4 text-xs">
+                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-950 space-y-1.5">
+                  <p className="font-bold text-[11px] uppercase tracking-wide text-emerald-800">
+                    Cara Menghubungkan Auto-Sync (Hanya 1 Menit):
                   </p>
+                  <ol className="list-decimal list-inside space-y-1 text-xs text-emerald-900">
+                    <li>Buka Google Spreadsheet Anda $\rightarrow$ klik menu <strong>Ekstensi</strong> $\rightarrow$ <strong>Apps Script</strong>.</li>
+                    <li>Hapus semua teks yang ada, lalu tempel kode skrip di bawah ini.</li>
+                    <li>Klik tombol biru <strong>Terapkan (Deploy)</strong> $\rightarrow$ <strong>Deployment baru</strong> $\rightarrow$ pilih jenis <strong>Aplikasi web</strong> $\rightarrow$ ubah *Siapa yang memiliki akses* menjadi <strong>Siapa saja (Anyone)</strong> $\rightarrow$ Salin <strong>URL Aplikasi Web</strong> dan tempel di form berikut.</li>
+                  </ol>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600 flex items-center justify-between">
-                  <span>Siapkan 11 kolom header otomatis:</span>
+                {/* Copy script button */}
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 text-white text-xs">
+                  <span className="font-mono text-[11px] text-slate-300 truncate">Kode Skrip Otomatisasi (doPost)</span>
+                  <button
+                    type="button"
+                    onClick={copyScriptToClipboard}
+                    className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>Salin Kode Skrip</span>
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveWebhookConnection} className="space-y-3 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-800 mb-1">
+                      1. URL Webhook Apps Script (Berakhiran /exec):
+                    </label>
+                    <input
+                      type="url"
+                      required
+                      placeholder="https://script.google.com/macros/s/.../exec"
+                      value={webhookUrlInput}
+                      onChange={(e) => setWebhookUrlInput(e.target.value)}
+                      className="w-full text-xs font-mono rounded-xl border border-slate-300 p-2.5 text-slate-900 bg-white focus:ring-1 focus:ring-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-800 mb-1">
+                      2. Tautan Google Spreadsheet (Untuk Tombol Buka Sheet):
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+                      value={customSheetUrl}
+                      onChange={(e) => setCustomSheetUrl(e.target.value)}
+                      className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-900 bg-white"
+                    />
+                  </div>
+
+                  <div className="pt-2 flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      disabled={isTestingWebhook || !webhookUrlInput.trim()}
+                      onClick={handleTestWebhook}
+                      className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-bold text-xs flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <CheckCheck className={`w-3.5 h-3.5 text-emerald-600 ${isTestingWebhook ? 'animate-pulse' : ''}`} />
+                      <span>{isTestingWebhook ? 'Mengirim Tes...' : 'Kirim Baris Uji Coba'}</span>
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowChangeSheetModal(false)}
+                        className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-colors shadow-2xs"
+                      >
+                        Simpan & Aktifkan Auto-Sync
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Tab 2: Copy to Clipboard / Export */}
+            {modalTab === 'copy' && (
+              <div className="mt-4 space-y-4 text-xs text-slate-600">
+                <p>
+                  Jika Anda belum sempat memasang Apps Script, Anda dapat langsung menyalin seluruh data laporan dalam format tabel dan menempelkannya (<kbd className="bg-slate-100 px-1 py-0.5 rounded border border-slate-300">Ctrl + V</kbd>) ke Google Spreadsheet kapan saja:
+                </p>
+
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={copyTableDataToClipboard}
+                    className="w-full py-2.5 px-4 rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-bold text-xs flex items-center justify-center gap-2 shadow-2xs transition-colors cursor-pointer"
+                  >
+                    <Copy className="w-4 h-4 text-emerald-400" />
+                    <span>Salin Semua Baris Data (Siap Tempel Ctrl+V ke Sheets)</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={copyHeadersToClipboard}
-                    className="px-2 py-1 rounded bg-white border border-slate-200 text-slate-800 font-bold hover:bg-slate-100 flex items-center gap-1"
+                    className="w-full py-2 px-4 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
                   >
-                    <Copy className="w-3 h-3 text-slate-500" />
-                    <span>Salin Kolom</span>
+                    <FileSpreadsheet className="w-4 h-4 text-slate-500" />
+                    <span>Salin 11 Kolom Header Saja</span>
                   </button>
-                </div>
 
-                <div className="flex justify-end gap-2 pt-2">
                   <button
                     type="button"
-                    onClick={() => setShowChangeSheetModal(false)}
-                    className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600"
+                    onClick={exportCSV}
+                    className="w-full py-2 px-4 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
                   >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800"
-                  >
-                    Simpan & Hubungkan
+                    <Download className="w-4 h-4 text-slate-500" />
+                    <span>Download File Laporan (.CSV)</span>
                   </button>
                 </div>
-              </form>
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}

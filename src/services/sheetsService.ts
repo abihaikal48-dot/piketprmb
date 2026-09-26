@@ -83,20 +83,65 @@ export const saveWebhookConnection = (webhookUrl: string, sheetUrl?: string, tit
   return info;
 };
 
+export const GOOGLE_APPS_SCRIPT_CODE = `function doPost(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    // Tambah header 11 kolom jika sheet masih baru/kosong
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow([
+        "Waktu & Tanggal",
+        "Nama Kru",
+        "Shift",
+        "Area Piket",
+        "Kode Area",
+        "Status AI",
+        "Ringkasan AI",
+        "Temuan Detail AI",
+        "Status SPV",
+        "Catatan SPV",
+        "ID Laporan"
+      ]);
+      sheet.getRange(1, 1, 1, 11).setFontWeight("bold");
+    }
+    
+    var data = JSON.parse(e.postData.contents);
+    sheet.appendRow([
+      data.timestamp || new Date().toLocaleString("id-ID"),
+      data.crewName || "-",
+      data.shift || "-",
+      data.areaName || "-",
+      data.areaCode || "-",
+      data.aiStatus || "-",
+      data.aiSummary || "-",
+      data.aiFindings || "-",
+      data.spvStatus || "PENDING",
+      data.spvNotes || "-",
+      data.id || "-"
+    ]);
+    
+    return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+
 // Send record to Google Sheet via Apps Script Webhook
 export const appendRecordViaWebhook = async (
   webhookUrl: string,
   record: PiketRecord
 ): Promise<boolean> => {
+  const isClean = record.aiVerification?.status === 'BERSIH_SESUAI_STANDAR';
   const payload = {
     timestamp: `${record.date} ${record.time}`,
     crewName: record.crewName,
     shift: record.shift,
     areaName: record.areaName,
     areaCode: record.areaCode,
-    aiStatus: record.aiVerification.status === 'BERSIH_SESUAI_STANDAR' ? 'BERSIH (STANDAR)' : 'PERLU TINDAK LANJUT',
-    aiSummary: record.aiVerification.summary,
-    aiFindings: record.aiVerification.findings.join('; '),
+    aiStatus: isClean ? 'BERSIH (STANDAR)' : 'PERLU TINDAK LANJUT',
+    aiSummary: record.aiVerification?.summary || '-',
+    aiFindings: (record.aiVerification?.findings || []).join('; ') || '-',
     spvStatus: record.spvStatus === 'APPROVED' ? 'DISETUJUI SPV' : record.spvStatus === 'REVISION_NEEDED' ? 'PERLU REVISI' : 'PENDING SPV',
     spvNotes: record.spvNotes || '-',
     id: record.id,
@@ -116,6 +161,33 @@ export const appendRecordViaWebhook = async (
     console.error('Error posting to Google Sheets Webhook:', err);
     throw err;
   }
+};
+
+export const testWebhookConnection = async (webhookUrl: string): Promise<boolean> => {
+  const now = new Date();
+  const dummyPayload = {
+    timestamp: now.toLocaleDateString('id-ID') + ' ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+    crewName: 'Tes Sistem Piket',
+    shift: 'Uji Koneksi',
+    areaName: 'Area Dapur / Fryer (Uji Coba)',
+    areaCode: 'TEST-01',
+    aiStatus: 'BERSIH (STANDAR)',
+    aiSummary: 'Koneksi otomatis dari web app Piket Cihuy berhasil terhubung ke Google Spreadsheet.',
+    aiFindings: 'Tes sinkronisasi data berhasil terkirim',
+    spvStatus: 'DISETUJUI SPV',
+    spvNotes: 'Sinkronisasi Otomatis Aktif',
+    id: `TEST-${Date.now()}`
+  };
+
+  await fetch(webhookUrl.trim(), {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8',
+    },
+    body: JSON.stringify(dummyPayload),
+  });
+  return true;
 };
 
 // OAuth methods

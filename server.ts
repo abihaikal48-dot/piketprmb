@@ -91,69 +91,92 @@ ${checklistStr}
 
 CATATAN: JANGAN MEMBERIKAN SKOR ANGKA. Gunakan bahasa Indonesia yang tegas, profesional, dan akurat.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            {
-              inlineData: {
-                mimeType,
-                data: base64Data
-              }
+    const schema = {
+      type: 'OBJECT',
+      properties: {
+        status: {
+          type: 'STRING',
+          enum: ['BERSIH_SESUAI_STANDAR', 'PERLU_TINDAKLANJUT'],
+          description: 'Status kebersihan akhir hasil deteksi'
+        },
+        isCorrectArea: {
+          type: 'BOOLEAN',
+          description: 'Apakah foto sesuai dengan area piket yang dilaporkan'
+        },
+        detectedAreaDescription: {
+          type: 'STRING',
+          description: 'Deskripsi singkat area atau objek yang teridentifikasi dalam foto'
+        },
+        summary: {
+          type: 'STRING',
+          description: 'Ringkasan hasil evaluasi kebersihan 1-2 kalimat'
+        },
+        findings: {
+          type: 'ARRAY',
+          items: { type: 'STRING' },
+          description: 'Daftar 2-4 poin temuan spesifik yang terlihat di foto'
+        },
+        checkItems: {
+          type: 'ARRAY',
+          items: {
+            type: 'OBJECT',
+            properties: {
+              item: { type: 'STRING' },
+              isClean: { type: 'BOOLEAN' },
+              notes: { type: 'STRING' }
             },
-            {
-              text: prompt
-            }
-          ]
-        }
-      ],
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'OBJECT',
-          properties: {
-            status: {
-              type: 'STRING',
-              enum: ['BERSIH_SESUAI_STANDAR', 'PERLU_TINDAKLANJUT'],
-              description: 'Status kebersihan akhir hasil deteksi'
-            },
-            isCorrectArea: {
-              type: 'BOOLEAN',
-              description: 'Apakah foto sesuai dengan area piket yang dilaporkan'
-            },
-            detectedAreaDescription: {
-              type: 'STRING',
-              description: 'Deskripsi singkat area atau objek yang teridentifikasi dalam foto'
-            },
-            summary: {
-              type: 'STRING',
-              description: 'Ringkasan hasil evaluasi kebersihan 1-2 kalimat'
-            },
-            findings: {
-              type: 'ARRAY',
-              items: { type: 'STRING' },
-              description: 'Daftar 2-4 poin temuan spesifik yang terlihat di foto'
-            },
-            checkItems: {
-              type: 'ARRAY',
-              items: {
-                type: 'OBJECT',
-                properties: {
-                  item: { type: 'STRING' },
-                  isClean: { type: 'BOOLEAN' },
-                  notes: { type: 'STRING' }
-                },
-                required: ['item', 'isClean', 'notes']
-              },
-              description: 'Status per item checklist'
-            }
+            required: ['item', 'isClean', 'notes']
           },
-          required: ['status', 'isCorrectArea', 'detectedAreaDescription', 'summary', 'findings', 'checkItems']
+          description: 'Status per item checklist'
         }
+      },
+      required: ['status', 'isCorrectArea', 'detectedAreaDescription', 'summary', 'findings', 'checkItems']
+    };
+
+    // Resilient model fallback: if gemini-3.8-flash hits 503 high demand, try alternative models
+    const candidateModels = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
+    let response: any = null;
+    let lastError: any = null;
+
+    for (const model of candidateModels) {
+      try {
+        response = await ai.models.generateContent({
+          model,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  inlineData: {
+                    mimeType,
+                    data: base64Data
+                  }
+                },
+                {
+                  text: prompt
+                }
+              ]
+            }
+          ],
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: schema
+          }
+        });
+        if (response && response.text) {
+          break; // successfully generated
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`Model ${model} failed, trying fallback:`, err?.message || err);
+        // Wait 400ms before trying the next candidate model
+        await new Promise(res => setTimeout(res, 400));
       }
-    });
+    }
+
+    if (!response || !response.text) {
+      throw lastError || new Error('Semua model AI sedang sibuk.');
+    }
 
     const resultText = response.text;
     const parsedData = JSON.parse(resultText || '{}');
@@ -164,16 +187,23 @@ CATATAN: JANGAN MEMBERIKAN SKOR ANGKA. Gunakan bahasa Indonesia yang tegas, prof
     });
   } catch (error: any) {
     console.error('Gemini cleaning verification error:', error);
+    const errStr = error?.message || String(error);
+    const isCapacityIssue = errStr.includes('503') || errStr.includes('high demand') || errStr.includes('UNAVAILABLE') || errStr.includes('429');
+
     // Strict fallback: do NOT blindly approve random or unverified photos
     return res.status(200).json({
       status: 'PERLU_TINDAKLANJUT',
       isCorrectArea: false,
-      detectedAreaDescription: 'Perlu verifikasi fisik langsung oleh SPV.',
-      summary: 'Foto bukti belum dapat diverifikasi otomatis secara akurat. Pastikan foto diambil dengan pencahayaan terang dan mengarah tepat pada area kerja.',
+      detectedAreaDescription: 'Memerlukan konfirmasi visual fisik langsung oleh SPV',
+      summary: isCapacityIssue
+        ? 'Layanan AI Gemini Google sedang mengalami antrean padat sementara (503). Foto bukti telah disimpan dengan aman dan diteruskan untuk verifikasi langsung oleh SPV.'
+        : 'Verifikasi visual otomatis belum dapat mengonfirmasi keaslian foto. Pastikan foto diambil dengan pencahayaan terang tepat di area piket.',
       findings: [
-        'Pastikan foto menampilkan area kerja dan peralatan yang dibersihkan secara jelas',
-        'Hindari mengambil foto objek lain, wajah, atau area gelap',
-        'Laporan piket tetap dicatat dan menunggu inspeksi visual langsung dari SPV'
+        isCapacityIssue
+          ? 'Server AI sedang dalam lonjakan trafik antrean sementara'
+          : 'Pastikan kamera mengarah tepat ke area kerja dan peralatan piket',
+        'Foto bukti fisik kebersihan telah didokumentasikan di sistem',
+        'Laporan piket menunggu konfirmasi inspeksi langsung oleh SPV'
       ],
       checkItems: [
         { item: 'Kesesuaian Area Kerja', isClean: false, notes: 'Menunggu konfirmasi visual SPV' },
