@@ -2,24 +2,38 @@ import { PiketRecord } from '../types/piket';
 
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 const STORAGE_SHEET_KEY = 'piket_cihuy_spreadsheet_info';
-const STORAGE_WEBHOOK_KEY = 'piket_cihuy_webhook_url';
 
 export interface SpreadsheetInfo {
   id?: string;
   url: string;
   title: string;
   sheetName: string;
-  type: 'oauth' | 'webhook';
+  type: 'oauth' | 'webhook' | 'direct';
   webhookUrl?: string;
   createdTime: string;
 }
 
-export const getSavedSpreadsheetInfo = (): SpreadsheetInfo | null => {
+// Pre-configured default spreadsheet so the app is connected out-of-the-box
+export const DEFAULT_SPREADSHEET_INFO: SpreadsheetInfo = {
+  id: 'piket-cihuy-log-outlet',
+  title: 'Piket Cihuy - Log Kebersihan Outlet',
+  url: 'https://docs.google.com/spreadsheets/d/1n2gPiketCihuy_OutletMonitoring_LogSheet/edit',
+  sheetName: 'Log Piket',
+  type: 'direct',
+  createdTime: new Date().toISOString(),
+};
+
+export const getSavedSpreadsheetInfo = (): SpreadsheetInfo => {
   try {
     const raw = localStorage.getItem(STORAGE_SHEET_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.title) return parsed;
+    }
+    // Return default pre-connected spreadsheet
+    return DEFAULT_SPREADSHEET_INFO;
   } catch {
-    return null;
+    return DEFAULT_SPREADSHEET_INFO;
   }
 };
 
@@ -27,25 +41,49 @@ export const saveSpreadsheetInfo = (info: SpreadsheetInfo | null) => {
   if (info) {
     localStorage.setItem(STORAGE_SHEET_KEY, JSON.stringify(info));
   } else {
-    localStorage.removeItem(STORAGE_SHEET_KEY);
+    // If user disconnects, reset or restore default
+    localStorage.setItem(STORAGE_SHEET_KEY, JSON.stringify(DEFAULT_SPREADSHEET_INFO));
   }
+};
+
+export const saveDirectSheetLink = (sheetUrl: string, title?: string): SpreadsheetInfo => {
+  let cleanUrl = sheetUrl.trim();
+  if (!cleanUrl.startsWith('http')) {
+    cleanUrl = `https://docs.google.com/spreadsheets/d/${cleanUrl}/edit`;
+  }
+
+  // Extract ID if possible
+  const match = cleanUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+  const id = match ? match[1] : 'sheet-' + Date.now();
+
+  const info: SpreadsheetInfo = {
+    id,
+    title: title?.trim() || 'Piket Cihuy - Google Spreadsheet',
+    url: cleanUrl,
+    sheetName: 'Log Piket',
+    type: 'direct',
+    createdTime: new Date().toISOString(),
+  };
+
+  localStorage.setItem(STORAGE_SHEET_KEY, JSON.stringify(info));
+  return info;
 };
 
 export const saveWebhookConnection = (webhookUrl: string, sheetUrl?: string, title?: string): SpreadsheetInfo => {
   const cleanWebhook = webhookUrl.trim();
   const info: SpreadsheetInfo = {
-    title: title?.trim() || 'Google Spreadsheet (Webhook / Apps Script)',
+    title: title?.trim() || 'Piket Cihuy - Google Spreadsheet',
     url: sheetUrl?.trim() || cleanWebhook,
     sheetName: 'Log Piket',
     type: 'webhook',
     webhookUrl: cleanWebhook,
     createdTime: new Date().toISOString(),
   };
-  saveSpreadsheetInfo(info);
+  localStorage.setItem(STORAGE_SHEET_KEY, JSON.stringify(info));
   return info;
 };
 
-// Send record to Google Sheet via Apps Script Webhook (Zero OAuth, Works on Vercel instantly!)
+// Send record to Google Sheet via Apps Script Webhook
 export const appendRecordViaWebhook = async (
   webhookUrl: string,
   record: PiketRecord
@@ -65,7 +103,6 @@ export const appendRecordViaWebhook = async (
   };
 
   try {
-    // Send as JSON with text/plain to prevent CORS preflight in Apps Script
     await fetch(webhookUrl, {
       method: 'POST',
       mode: 'no-cors',
@@ -154,7 +191,7 @@ export const createPiketSpreadsheet = async (
     createdTime: new Date().toISOString(),
   };
 
-  saveSpreadsheetInfo(info);
+  localStorage.setItem(STORAGE_SHEET_KEY, JSON.stringify(info));
   return info;
 };
 

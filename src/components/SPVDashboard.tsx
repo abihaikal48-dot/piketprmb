@@ -16,7 +16,9 @@ import {
   Shield,
   Sparkles,
   Lock,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Copy,
+  Plus
 } from 'lucide-react';
 import { usePiket } from '../context/PiketContext';
 import { PiketRecord } from '../types/piket';
@@ -37,6 +39,7 @@ export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
     googleUserEmail,
     connectGoogleSpreadsheet,
     disconnectGoogleSpreadsheet,
+    setDirectSpreadsheetLink,
     updateRecordSPVStatus,
     syncRecordToGoogleSheets,
     syncAllPendingToSheets,
@@ -54,17 +57,36 @@ export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [showWebhookSetup, setShowWebhookSetup] = useState(false);
   const [webhookUrlInput, setWebhookUrlInput] = useState('');
+  const [showChangeSheetModal, setShowChangeSheetModal] = useState(false);
+  const [customSheetUrl, setCustomSheetUrl] = useState('');
+
+  const copyHeadersToClipboard = () => {
+    const headerText = "Waktu Kirim (WIB)\tNama Kru\tShift\tArea Piket\tKode Area\tStatus Verifikasi AI\tRingkasan AI\tTemuan Detail AI\tStatus SPV\tCatatan SPV\tID Laporan";
+    navigator.clipboard.writeText(headerText);
+    setSyncToast('Format 11 kolom header disalin ke clipboard!');
+    setTimeout(() => setSyncToast(null), 3000);
+  };
+
+  const handleSaveDirectSheet = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customSheetUrl.trim()) return;
+    setDirectSpreadsheetLink(customSheetUrl.trim());
+    setShowChangeSheetModal(false);
+    setCustomSheetUrl('');
+    setSyncToast('Link Google Spreadsheet berhasil diperbarui!');
+    setTimeout(() => setSyncToast(null), 3000);
+  };
 
   // Statistics calculation for current active shift
   const today = new Date().toISOString().split('T')[0];
   const todayShiftRecords = records.filter(r => r.date === today && r.shift === activeShift);
 
   const completedCleanCount = todayShiftRecords.filter(
-    r => r.aiVerification.status === 'BERSIH_SESUAI_STANDAR'
+    r => r.aiVerification?.status === 'BERSIH_SESUAI_STANDAR'
   ).length;
 
   const needAttentionCount = todayShiftRecords.filter(
-    r => r.aiVerification.status === 'PERLU_TINDAKLANJUT'
+    r => r.aiVerification?.status === 'PERLU_TINDAKLANJUT'
   ).length;
 
   const totalAreas = areas.length;
@@ -79,7 +101,7 @@ export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
   const filteredRecords = records.filter(record => {
     if (filterShift !== 'all' && record.shift !== filterShift) return false;
     if (filterArea !== 'all' && record.areaId !== filterArea) return false;
-    if (filterStatus !== 'all' && record.aiVerification.status !== filterStatus) return false;
+    if (filterStatus !== 'all' && record.aiVerification?.status !== filterStatus) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchCrew = record.crewName.toLowerCase().includes(q);
@@ -258,11 +280,29 @@ export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
                 href={spreadsheetInfo.url}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors shadow-2xs"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 <span>Buka Spreadsheet</span>
               </a>
+
+              <button
+                onClick={() => setShowChangeSheetModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-xs transition-colors"
+                title="Ganti atau masukkan link Google Spreadsheet sendiri"
+              >
+                <LinkIcon className="w-3.5 h-3.5 text-slate-500" />
+                <span>Ganti Link</span>
+              </button>
+
+              <button
+                onClick={copyHeadersToClipboard}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-medium text-xs transition-colors"
+                title="Salin 11 nama kolom header untuk ditempel di spreadsheet baru"
+              >
+                <Copy className="w-3 h-3 text-slate-400" />
+                <span>Salin Kolom</span>
+              </button>
 
               {unsyncedCount > 0 && (
                 <button
@@ -274,69 +314,82 @@ export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
                   <span>Sync ({unsyncedCount})</span>
                 </button>
               )}
-
-              <button
-                onClick={disconnectGoogleSpreadsheet}
-                className="text-xs text-slate-400 hover:text-slate-600 underline ml-1"
-              >
-                Putuskan
-              </button>
             </>
           ) : (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setShowWebhookSetup(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs transition-colors"
+                onClick={() => setShowChangeSheetModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-2xs transition-colors"
               >
                 <LinkIcon className="w-3.5 h-3.5" />
-                <span>Hubungkan Google Sheets</span>
+                <span>Sambungkan Spreadsheet</span>
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Webhook Connection Dialog */}
-      {showWebhookSetup && (
+      {/* Modal: Ganti Link Google Spreadsheet */}
+      {showChangeSheetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl border border-slate-200">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-sm font-bold text-slate-900">Hubungkan Google Spreadsheet</h3>
-              <button onClick={() => setShowWebhookSetup(false)} className="text-slate-400 hover:text-slate-600">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <h3 className="text-sm font-bold text-slate-900">Sambungkan Google Spreadsheet</h3>
+              </div>
+              <button onClick={() => setShowChangeSheetModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="mt-3 space-y-3 text-xs text-slate-600">
               <p>
-                Agar spreadsheet terhubung di Vercel tanpa kendala otorisasi akun Google:
+                Masukkan link Google Spreadsheet Anda (bebas, langsung terhubung tanpa repot otorisasi):
               </p>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] space-y-1 text-slate-700">
-                <p className="font-bold text-slate-900">Cara Cepat (Google Apps Script):</p>
-                <p>1. Buat Spreadsheet di Google Drive Anda.</p>
-                <p>2. Klik <em>Extensions $\rightarrow$ Apps Script</em>, buat fungsi doPost sederhana untuk append row.</p>
-                <p>3. Deploy as Web App (Anyone can access), lalu tempel URL-nya di bawah:</p>
-              </div>
 
-              <form onSubmit={handleSaveWebhook} className="space-y-3 pt-1">
+              <form onSubmit={handleSaveDirectSheet} className="space-y-3 pt-1">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    URL Webhook Google Apps Script / Spreadsheet:
+                    Link / ID Google Spreadsheet:
                   </label>
                   <input
-                    type="url"
+                    type="text"
                     required
-                    placeholder="https://script.google.com/macros/s/.../exec"
-                    value={webhookUrlInput}
-                    onChange={(e) => setWebhookUrlInput(e.target.value)}
+                    placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+                    value={customSheetUrl}
+                    onChange={(e) => setCustomSheetUrl(e.target.value)}
                     className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-900 bg-white"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Atau buat sheet baru di Google Drive:{" "}
+                    <a
+                      href="https://docs.google.com/spreadsheets/u/0/create"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-slate-900 font-bold underline"
+                    >
+                      Buka Google Sheets Baru
+                    </a>
+                  </p>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-1">
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600 flex items-center justify-between">
+                  <span>Siapkan 11 kolom header otomatis:</span>
                   <button
                     type="button"
-                    onClick={() => setShowWebhookSetup(false)}
+                    onClick={copyHeadersToClipboard}
+                    className="px-2 py-1 rounded bg-white border border-slate-200 text-slate-800 font-bold hover:bg-slate-100 flex items-center gap-1"
+                  >
+                    <Copy className="w-3 h-3 text-slate-500" />
+                    <span>Salin Kolom</span>
+                  </button>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowChangeSheetModal(false)}
                     className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600"
                   >
                     Batal
@@ -407,7 +460,7 @@ export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
           </div>
         ) : (
           filteredRecords.map((record) => {
-            const isClean = record.aiVerification.status === 'BERSIH_SESUAI_STANDAR';
+            const isClean = record.aiVerification?.status === 'BERSIH_SESUAI_STANDAR';
 
             return (
               <div
@@ -457,7 +510,7 @@ export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
                         {isClean ? 'AI: Bersih' : 'AI: Perlu Perhatian'}
                       </span>
                       <p className="text-[11px] text-slate-500 italic truncate max-w-xs">
-                        "{record.aiVerification.summary}"
+                        "{record.aiVerification?.summary || 'Tercatat'}"
                       </p>
                     </div>
                   </div>
@@ -537,18 +590,18 @@ export const SPVDashboard: React.FC<SPVDashboardProps> = ({ onLockSPV }) => {
                   <span className="text-xs font-bold text-slate-800">Analisis AI Gemini</span>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      selectedRecordForDetail.aiVerification.status === 'BERSIH_SESUAI_STANDAR'
+                      selectedRecordForDetail.aiVerification?.status === 'BERSIH_SESUAI_STANDAR'
                         ? 'bg-emerald-100 text-emerald-800'
                         : 'bg-amber-100 text-amber-800'
                     }`}
                   >
-                    {selectedRecordForDetail.aiVerification.status === 'BERSIH_SESUAI_STANDAR'
+                    {selectedRecordForDetail.aiVerification?.status === 'BERSIH_SESUAI_STANDAR'
                       ? 'Bersih Sesuai Standar'
                       : 'Perlu Tindak Lanjut'}
                   </span>
                 </div>
                 <p className="text-xs text-slate-700 leading-relaxed pt-1">
-                  {selectedRecordForDetail.aiVerification.summary}
+                  {selectedRecordForDetail.aiVerification?.summary || 'Tidak ada catatan visual.'}
                 </p>
               </div>
 

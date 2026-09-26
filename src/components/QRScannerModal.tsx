@@ -16,23 +16,48 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
 
-  useEffect(() => {
-    if (!isOpen) {
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => {}).finally(() => {
-          scannerRef.current?.clear();
-          scannerRef.current = null;
-        });
+  const stopScannerSafely = async (instance?: Html5Qrcode | null) => {
+    const scanner = instance || scannerRef.current;
+    if (scanner === scannerRef.current) {
+      scannerRef.current = null;
+    }
+    if (!scanner) return;
+
+    try {
+      if (scanner.isScanning) {
+        await scanner.stop();
       }
+    } catch {
+      // Silently catch and suppress "Cannot stop, scanner is not running or paused"
+    }
+
+    try {
+      scanner.clear();
+    } catch {
+      // Silently catch container clear errors
+    }
+  };
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!isOpen) {
+      stopScannerSafely();
       setIsScanning(false);
       setCameraError(null);
       return;
     }
 
     const startScanner = async () => {
+      if (isCancelled) return;
       try {
         setCameraError(null);
         setIsScanning(true);
+
+        // Ensure container exists
+        const container = document.getElementById('qr-reader-container');
+        if (!container) return;
+
         const html5QrCode = new Html5Qrcode('qr-reader-container');
         scannerRef.current = html5QrCode;
 
@@ -40,40 +65,43 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
           { facingMode: 'environment' },
           {
             fps: 10,
-            qrbox: { width: 250, height: 250 },
+            qrbox: { width: 240, height: 240 },
             aspectRatio: 1.0,
           },
           (decodedText) => {
-            handleScanSuccess(decodedText);
+            if (!isCancelled) {
+              handleScanSuccess(decodedText);
+            }
           },
           () => {
-            // scan frame error (ignore continuous scan frames)
+            // ignore continuous scanning frame misses
           }
         );
+
+        if (isCancelled) {
+          stopScannerSafely(html5QrCode);
+        }
       } catch (err: any) {
-        console.warn('Camera scan start notice:', err);
-        setCameraError(
-          'Kamera tidak dapat diakses atau izin belum diberikan. Anda dapat memilih area piket langsung dari tombol cepat di bawah.'
-        );
-        setIsScanning(false);
+        if (!isCancelled) {
+          console.warn('Camera scan notice:', err);
+          setCameraError(
+            'Kamera tidak dapat diakses atau izin belum diberikan. Anda dapat memilih area piket langsung dari tombol cepat di bawah.'
+          );
+          setIsScanning(false);
+        }
       }
     };
 
     const timer = setTimeout(startScanner, 200);
 
     return () => {
+      isCancelled = true;
       clearTimeout(timer);
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => {}).finally(() => {
-          scannerRef.current?.clear();
-          scannerRef.current = null;
-        });
-      }
+      stopScannerSafely();
     };
   }, [isOpen]);
 
-  const handleScanSuccess = (text: string) => {
-    // If QR contains full url e.g. https://.../?area=fryer-station or raw ID/code
+  const handleScanSuccess = async (text: string) => {
     let matchedArea: PiketArea | undefined;
 
     if (text.includes('area=')) {
@@ -84,7 +112,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
           matchedArea = areas.find(a => a.id === areaParam || a.code.toLowerCase() === areaParam.toLowerCase());
         }
       } catch {
-        // fallback regex
         const match = text.match(/area=([a-zA-Z0-9_-]+)/);
         if (match && match[1]) {
           matchedArea = areas.find(a => a.id === match[1] || a.code.toLowerCase() === match[1].toLowerCase());
@@ -101,86 +128,74 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
       );
     }
 
+    await stopScannerSafely();
+
     if (matchedArea) {
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => {});
-      }
       onSelectArea(matchedArea);
       onClose();
-    } else {
-      // Pick first matching or default area
-      if (areas.length > 0) {
-        onSelectArea(areas[0]);
-        onClose();
-      }
+    } else if (areas.length > 0) {
+      onSelectArea(areas[0]);
+      onClose();
     }
+  };
+
+  const handleClose = async () => {
+    await stopScannerSafely();
+    onClose();
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs">
-      <div className="bg-white w-full max-w-md rounded-2xl overflow-hidden shadow-2xl border border-slate-200">
-        {/* Header */}
-        <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Camera className="w-5 h-5 text-red-500" />
-            <h3 className="font-bold text-base">Pindai QR Area Piket</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+      <div className="bg-white w-full max-w-sm rounded-2xl overflow-hidden shadow-xl border border-slate-200">
+        <div className="flex items-center justify-between p-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Scan QR Code Area</h3>
+            <p className="text-[11px] text-slate-500">Arahkan kamera ke stiker QR meja piket</p>
           </div>
           <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            onClick={handleClose}
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Video Viewport */}
-        <div className="p-4 bg-slate-950 flex flex-col items-center justify-center min-h-[300px] relative">
-          <div id="qr-reader-container" className="w-full max-w-[280px] overflow-hidden rounded-xl" />
+        <div className="p-4 space-y-3">
+          <div className="relative rounded-xl overflow-hidden bg-black aspect-square flex items-center justify-center">
+            <div id="qr-reader-container" className="w-full h-full" />
 
-          {/* Scanner Overlay Box */}
-          {isScanning && !cameraError && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-56 h-56 border-2 border-red-500 rounded-2xl relative animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.3)]">
-                <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-white" />
-                <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-white" />
-                <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-white" />
-                <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-white" />
+            {cameraError && (
+              <div className="absolute inset-0 bg-slate-900/90 p-5 flex flex-col items-center justify-center text-center text-white">
+                <AlertCircle className="w-8 h-8 text-amber-400 mb-2" />
+                <p className="text-xs font-semibold leading-relaxed mb-3">
+                  {cameraError}
+                </p>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          {cameraError && (
-            <div className="text-center p-4 max-w-xs text-slate-300">
-              <AlertCircle className="w-10 h-10 text-amber-400 mx-auto mb-2" />
-              <p className="text-xs text-slate-300 mb-3">{cameraError}</p>
+          <div className="space-y-1.5 pt-1">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              Pilih Cepat Tanpa Kamera:
+            </span>
+            <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto">
+              {areas.map(area => (
+                <button
+                  key={area.id}
+                  onClick={async () => {
+                    await stopScannerSafely();
+                    onSelectArea(area);
+                    onClose();
+                  }}
+                  className="p-2 rounded-lg text-left bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs transition-colors"
+                >
+                  <span className="text-[10px] font-mono text-slate-400 block font-bold">{area.code}</span>
+                  <span className="font-bold text-slate-800 truncate block">{area.name}</span>
+                </button>
+              ))}
             </div>
-          )}
-        </div>
-
-        {/* Quick Selection Shortcuts (Essential for development & immediate test without printed QR) */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-            Atau Pilih Cepat Area Piket (Simulasi Scan):
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {areas.map(area => (
-              <button
-                key={area.id}
-                onClick={() => {
-                  onSelectArea(area);
-                  onClose();
-                }}
-                className="text-left p-2.5 rounded-xl border border-slate-200 bg-white hover:border-red-500 hover:bg-red-50/50 transition-all text-xs font-semibold text-slate-800 flex items-center gap-2 group shadow-2xs"
-              >
-                <div className="w-2 h-2 rounded-full bg-red-500 group-hover:scale-125 transition-transform" />
-                <div className="truncate">
-                  <span className="block truncate">{area.name}</span>
-                  <span className="text-[10px] text-slate-400 font-mono">{area.code}</span>
-                </div>
-              </button>
-            ))}
           </div>
         </div>
       </div>

@@ -22,6 +22,7 @@ import {
   appendPiketRecordToSheet,
   appendRecordViaWebhook,
   saveWebhookConnection,
+  saveDirectSheetLink,
   saveSpreadsheetInfo
 } from '../services/sheetsService';
 import { getCachedAccessToken } from '../services/authService';
@@ -44,6 +45,7 @@ interface PiketContextType {
   addNewCrew: (name: string, role: CrewMember['role'], phone?: string) => void;
   connectGoogleSpreadsheet: (token: string, email: string) => Promise<SpreadsheetInfo>;
   connectWebhookSpreadsheet: (webhookUrl: string, sheetUrl?: string, title?: string) => SpreadsheetInfo;
+  setDirectSpreadsheetLink: (url: string, title?: string) => SpreadsheetInfo;
   disconnectGoogleSpreadsheet: () => void;
   syncRecordToGoogleSheets: (recordId: string) => Promise<boolean>;
   syncAllPendingToSheets: () => Promise<number>;
@@ -99,7 +101,18 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [googleUserEmail, setGoogleUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(records));
+    try {
+      // Store lightweight copy in localStorage (limit to last 25 records with truncated big images if needed)
+      const safeRecords = records.slice(0, 25).map(r => ({
+        ...r,
+        photoBase64: r.photoBase64 && r.photoBase64.length > 200000
+          ? r.photoBase64.slice(0, 50) + '...'
+          : r.photoBase64
+      }));
+      localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(safeRecords));
+    } catch (e) {
+      console.warn('LocalStorage quota limit reached, ignoring local persistence for heavy image records:', e);
+    }
   }, [records]);
 
   useEffect(() => {
@@ -281,9 +294,15 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return info;
   };
 
+  const setDirectSpreadsheetLink = (url: string, title?: string): SpreadsheetInfo => {
+    const info = saveDirectSheetLink(url, title);
+    setSpreadsheetInfo(info);
+    return info;
+  };
+
   const disconnectGoogleSpreadsheet = () => {
     saveSpreadsheetInfo(null);
-    setSpreadsheetInfo(null);
+    setSpreadsheetInfo(getSavedSpreadsheetInfo());
     setGoogleUserEmail(null);
   };
 
@@ -364,6 +383,7 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         addNewCrew,
         connectGoogleSpreadsheet,
         connectWebhookSpreadsheet,
+        setDirectSpreadsheetLink,
         disconnectGoogleSpreadsheet,
         syncRecordToGoogleSheets,
         syncAllPendingToSheets,

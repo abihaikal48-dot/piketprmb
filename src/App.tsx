@@ -7,6 +7,7 @@ import { RosterManager } from './components/RosterManager';
 import { SPVDashboard } from './components/SPVDashboard';
 import { QRStickerPrinter } from './components/QRStickerPrinter';
 import { SPVAuthModal } from './components/SPVAuthModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Lock } from 'lucide-react';
 
 function MainApp() {
@@ -137,8 +138,10 @@ function MainApp() {
 
 export default function App() {
   return (
-    <PiketProvider>
-      <MainApp />
-    </PiketProvider>
+    <ErrorBoundary>
+      <PiketProvider>
+        <MainApp />
+      </PiketProvider>
+    </ErrorBoundary>
   );
 }

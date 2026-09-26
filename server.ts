@@ -17,8 +17,9 @@ const isProd = process.env.NODE_ENV === 'production';
 app.use(express.json({ limit: '50mb' }));
 
 // Initialized Gemini AI client
-const geminiApiKey = process.env.GEMINI_API_KEY;
-const ai = geminiApiKey ? new GoogleGenAI() : null;
+// Initialized Gemini AI client
+const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : new GoogleGenAI();
 
 // In-memory store for server-persisted records
 let piketRecords: any[] = [];
@@ -42,44 +43,53 @@ app.post('/api/verify-cleaning', async (req, res) => {
       base64Data = parts[1];
     }
 
-    if (!ai) {
-      console.warn('GEMINI_API_KEY not configured, using smart simulated response.');
-      return res.json({
-        status: 'BERSIH_SESUAI_STANDAR',
-        isCorrectArea: true,
-        detectedAreaDescription: `Area ${areaName} terpantau tertata.`,
-        summary: `Area ${areaName} telah dibersihkan oleh ${crewName || 'kru'}. Permukaan tampak terawat dan rapi.`,
-        findings: [
-          'Permukaan utama telah diseka dan bebas kotoran mencolok',
-          'Peralatan kerja tersusun pada posisi semestinya',
-          'Tidak terlihat tumpahan bahan makanan'
-        ],
-        checkItems: (standardChecklist || ['Kebersihan lantai & meja', 'Kerapian peralatan']).map((chk: string) => ({
-          item: chk,
-          isClean: true,
-          notes: 'Memenuhi standar kebersihan'
-        })),
-        verifiedAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-      });
-    }
-
     const checklistStr = Array.isArray(standardChecklist)
-      ? standardChecklist.map((c, i) => `${i + 1}. ${c}`).join('\n')
-      : 'Pembersihan meja, lantai, dan peralatan';
+      ? standardChecklist.map((c, i) => `- ${c}`).join('\n')
+      : '- Kebersihan meja, lantai, dan peralatan';
 
-    const prompt = `Anda adalah Auditor Mutu & Kebersihan Outlet "Hara Chicken" (restoran cepat saji ayam goreng crispy).
-Kru piket ${crewName || 'Kru Outlet'} baru saja memindai QR Code area "${areaName}" (${areaCode}, Kategori: ${category}) dan mengunggah foto bukti kebersihan ini.
+    const prompt = `Anda adalah Auditor Mutu & Kebersihan Outlet Restoran Cepat Saji "Hara Chicken" yang SANGAT KETAT, TELITI, DAN ANTI-MANIPULASI.
+Kru piket ${crewName || 'Kru Outlet'} mengaku telah membersihkan area: "${areaName}" (Kode: ${areaCode}, Kategori: ${category}) dan mengunggah foto bukti ini.
 
-Tugas Anda adalah memeriksa foto ini secara visual:
-1. Pastikan foto benar-benar memperlihatkan area kerja "${areaName}" atau peralatan yang relevan.
-2. Periksa standar kebersihan:
+PERINGATAN AUDIT FISIK - JANGAN PERNAH MENILAI BERSIH UNTUK FOTO ASAL, FOTO TIDAK SESUAI, ATAU FOTO GELAP/BURAM:
+1. VALIDASI KESESUAIAN AREA & OBJEK (ANTI-FOTO ASAL / SELFIE / BENDA LAIN):
+   - Periksa apakah foto ini BENAR-BENAR merupakan area kerja "${areaName}" di outlet restoran atau peralatan dapur/meja yang relevan?
+   - JIKA FOTO ADALAH:
+     * Foto selfie, foto wajah seseorang, foto anggota badan/pakaian
+     * Foto layar komputer / layar HP / tablet / screenshot
+     * Foto tembok polos, langit-langit/plafon, lantai kosong tanpa perlengkapan outlet
+     * Foto kasur, kamar tidur, mobil, jalanan luar, pemandangan, hewan
+     * Foto hitam gelap gulita, buram parah (blur), ditutup jari/kamera gelap
+     * Foto benda acak yang tidak berhubungan sama sekali dengan area kerja "${areaName}"
+   MAKA ANDA WAJIB MEMBERIKAN KEPUTUSAN:
+     - "isCorrectArea": false
+     - "status": "PERLU_TINDAKLANJUT"
+     - "detectedAreaDescription": Sebutkan objek nyata yang terlihat di foto (misalnya: "Foto wajah manusia / selfie", "Layar monitor", "Tembok polos", dsb).
+     - "summary": "Foto ditolak karena bukan area ${areaName}. Terdeteksi: [sebutkan objek yang tampak di foto]. Mohon ambil foto area kerja yang sebenarnya."
+     - "findings": ["Foto yang diunggah tidak memperlihatkan area kerja ${areaName}", "Kru mengunggah foto yang tidak relevan dengan tugas piket", "Wajib mengambil foto fisik area kerja ${areaName}"]
+     - Pada "checkItems", tandai semua item "isClean": false dengan catatan "Foto tidak valid / objek tidak sesuai".
+
+2. EVALUASI KEBERSIHAN NYATA (JIKA OBJEK FOTO MEMANG AREA TERSEBUT):
+   Periksa standar checklist SOP berikut:
 ${checklistStr}
-3. Deteksi apakah ada sisa kotoran seperti remahan tepung crispy berserakan, cipratan minyak/saus, genangan air/lantai becek licin, lap kotor tidak tertata, tempat sampah meluap, atau wadah tidak rapi.
-4. Tentukan status akhir:
-   - "BERSIH_SESUAI_STANDAR" bila area sudah rapi, bersih, dan higienis untuk standar operasional resto.
-   - "PERLU_TINDAKLANJUT" bila masih tampak kotoran, minyak tebal, sampah belum dibuang, atau peralatan berantakan.
-5. Berikan ringkasan (summary) dan poin temuan (findings) yang spesifik berdasarkan apa yang terlihat pada gambar.
-CATATAN: JANGAN MEMBERIKAN SKOR ANGKA. Gunakan bahasa Indonesia yang ramah, jelas, dan konstruktif.`;
+   - Deteksi dengan jeli:
+     * Noda minyak, kerak penggorengan, ceceran saus/tepung crispy berserakan
+     * Sampah plastik/struk/tisu tercecer yang belum dibuang
+     * Peralatan masak/wadah kotor berserakan belum dicuci
+     * Genangan air, lantai becek berminyak, atau lap kotor diletakkan sembarangan
+   - JIKA MASIH ADA KOTORAN, NODA, ATAU BERANTAKAN:
+     - "isCorrectArea": true
+     - "status": "PERLU_TINDAKLANJUT"
+     - "summary": Sebutkan bagian mana yang masih kotor atau berantakan pada area ${areaName}.
+     - "findings": Berikan 2-4 poin temuan spesifik kotoran yang tampak pada gambar.
+     - Tandai item yang belum bersih dengan "isClean": false dan berikan catatan perbaikan.
+
+3. HANYA JIKA BENAR-BENAR BERSIH, HIGIENIS, & TERTATA RAPI:
+   - "isCorrectArea": true
+   - "status": "BERSIH_SESUAI_STANDAR"
+   - "summary": Konfirmasi bahwa area ${areaName} rapi, bersih, dan higienis memenuhi standar outlet Hara Chicken.
+   - "findings": Sebutkan poin-poin spesifik bagian yang tampak bersih.
+
+CATATAN: JANGAN MEMBERIKAN SKOR ANGKA. Gunakan bahasa Indonesia yang tegas, profesional, dan akurat.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3.8-flash',
@@ -115,7 +125,7 @@ CATATAN: JANGAN MEMBERIKAN SKOR ANGKA. Gunakan bahasa Indonesia yang ramah, jela
             },
             detectedAreaDescription: {
               type: 'STRING',
-              description: 'Deskripsi singkat area yang teridentifikasi dalam foto'
+              description: 'Deskripsi singkat area atau objek yang teridentifikasi dalam foto'
             },
             summary: {
               type: 'STRING',
@@ -154,20 +164,20 @@ CATATAN: JANGAN MEMBERIKAN SKOR ANGKA. Gunakan bahasa Indonesia yang ramah, jela
     });
   } catch (error: any) {
     console.error('Gemini cleaning verification error:', error);
-    // Return structured fallback rather than crashing
+    // Strict fallback: do NOT blindly approve random or unverified photos
     return res.status(200).json({
-      status: 'BERSIH_SESUAI_STANDAR',
-      isCorrectArea: true,
-      detectedAreaDescription: 'Area piket outlet Hara Chicken.',
-      summary: 'Foto bukti piket berhasil diunggah dan disimpan. Verifikasi visual manual dapat dikonfirmasi oleh SPV.',
+      status: 'PERLU_TINDAKLANJUT',
+      isCorrectArea: false,
+      detectedAreaDescription: 'Perlu verifikasi fisik langsung oleh SPV.',
+      summary: 'Foto bukti belum dapat diverifikasi otomatis secara akurat. Pastikan foto diambil dengan pencahayaan terang dan mengarah tepat pada area kerja.',
       findings: [
-        'Foto bukti fisik kebersihan telah didokumentasikan',
-        'Tidak terdeteksi anomali kritis yang menghambat operasional',
-        'Laporan siap disinkronkan ke Google Spreadsheet'
+        'Pastikan foto menampilkan area kerja dan peralatan yang dibersihkan secara jelas',
+        'Hindari mengambil foto objek lain, wajah, atau area gelap',
+        'Laporan piket tetap dicatat dan menunggu inspeksi visual langsung dari SPV'
       ],
       checkItems: [
-        { item: 'Kondisi Permukaan Utama', isClean: true, notes: 'Telah dilap rapi' },
-        { item: 'Kerapian Area', isClean: true, notes: 'Sesuai prosedur operasional' }
+        { item: 'Kesesuaian Area Kerja', isClean: false, notes: 'Menunggu konfirmasi visual SPV' },
+        { item: 'Kerapian & Kebersihan', isClean: false, notes: 'Perlu inspeksi fisik langsung' }
       ],
       verifiedAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
     });

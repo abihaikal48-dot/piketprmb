@@ -11,7 +11,6 @@ import {
   ArrowRight,
   ShieldCheck,
   Check,
-  ExternalLink,
   Info
 } from 'lucide-react';
 import { usePiket } from '../context/PiketContext';
@@ -20,11 +19,57 @@ import { QRScannerModal } from './QRScannerModal';
 import { AreaIcon } from './AreaIcon';
 
 interface CrewPiketFlowProps {
-  onGoToDashboard: () => void;
-  onGoToRoster: () => void;
+  onGoToSPVPortal?: () => void;
+  onGoToDashboard?: () => void;
+  onGoToRoster?: () => void;
 }
 
-export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard, onGoToRoster }) => {
+// Client-side image compression to prevent memory freeze and LocalStorage QuotaExceeded crashes
+const compressImageFile = (file: File): Promise<string> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const resultStr = (e.target?.result as string) || '';
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const maxDim = 900;
+
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(resultStr);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.onerror = () => resolve(resultStr);
+      img.src = resultStr;
+    };
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(file);
+  });
+};
+
+export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({
+  onGoToSPVPortal,
+  onGoToDashboard,
+  onGoToRoster
+}) => {
   const {
     areas,
     crewList,
@@ -34,8 +79,6 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard, o
     selectAreaById,
     getAssignedCrewForArea,
     addRecord,
-    isSheetsConnected,
-    spreadsheetInfo
   } = usePiket();
 
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -66,17 +109,23 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard, o
     }
   }, [selectedArea, activeShift]);
 
-  // Handle Photo selection
-  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Photo selection with compression
+  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPhotoBase64(reader.result as string);
+    try {
+      const compressed = await compressImageFile(file);
+      setPhotoBase64(compressed);
       setAiResult(null);
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setPhotoBase64(reader.result as string);
+        setAiResult(null);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // Trigger Gemini AI Vision
@@ -178,10 +227,18 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard, o
     const today = new Date().toISOString().split('T')[0];
     const rec = records.find(r => r.areaId === areaId && r.shift === activeShift && r.date === today);
     if (!rec) return { status: 'BELUM', label: 'Belum', color: 'bg-slate-100 text-slate-500' };
-    if (rec.aiVerification.status === 'BERSIH_SESUAI_STANDAR') {
+    if (rec.aiVerification?.status === 'BERSIH_SESUAI_STANDAR') {
       return { status: 'SELESAI', label: 'Bersih', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
     }
     return { status: 'PERBAIKAN', label: 'Perlu Revisi', color: 'bg-amber-50 text-amber-700 border-amber-200' };
+  };
+
+  const handleGoToSPV = () => {
+    if (onGoToDashboard) {
+      onGoToDashboard();
+    } else if (onGoToSPVPortal) {
+      onGoToSPVPortal();
+    }
   };
 
   return (
@@ -220,7 +277,10 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard, o
             <div className="flex items-center justify-between px-1">
               <span className="text-xs font-bold text-slate-600">Pilih Area Piket:</span>
               <button
-                onClick={onGoToRoster}
+                onClick={() => {
+                  if (onGoToRoster) onGoToRoster();
+                  else if (onGoToSPVPortal) onGoToSPVPortal();
+                }}
                 className="text-xs text-slate-500 hover:text-slate-900 font-medium"
               >
                 Lihat Jadwal Kru
@@ -283,7 +343,7 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard, o
                     <span>•</span>
                     <span>{selectedArea.category}</span>
                   </div>
-                  <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+                  <h1 className="text-base sm:lg font-bold text-slate-900 leading-tight">
                     {selectedArea.name}
                   </h1>
                 </div>
@@ -408,26 +468,32 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard, o
               </button>
             )}
 
-            {/* AI Result Card (Clean, modern, no scores) */}
+            {/* AI Result Card */}
             {aiResult && (
               <div
                 className={`p-3.5 rounded-xl border ${
-                  aiResult.status === 'BERSIH_SESUAI_STANDAR'
+                  !aiResult.isCorrectArea
+                    ? 'bg-rose-50 border-rose-200 text-rose-950'
+                    : aiResult.status === 'BERSIH_SESUAI_STANDAR'
                     ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
                     : 'bg-amber-50/70 border-amber-200 text-amber-950'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-1.5">
-                    {aiResult.status === 'BERSIH_SESUAI_STANDAR' ? (
+                    {!aiResult.isCorrectArea ? (
+                      <AlertTriangle className="w-4 h-4 text-rose-600" />
+                    ) : aiResult.status === 'BERSIH_SESUAI_STANDAR' ? (
                       <CheckCircle2 className="w-4 h-4 text-emerald-700" />
                     ) : (
                       <AlertTriangle className="w-4 h-4 text-amber-700" />
                     )}
                     <span className="font-bold text-xs">
-                      {aiResult.status === 'BERSIH_SESUAI_STANDAR'
+                      {!aiResult.isCorrectArea
+                        ? 'Foto Ditolak: Bukan Area Terkait'
+                        : aiResult.status === 'BERSIH_SESUAI_STANDAR'
                         ? 'Bersih Sesuai Standar'
-                        : 'Perlu Tindak Lanjut'}
+                        : 'Perlu Dibersihkan Ulang'}
                     </span>
                   </div>
                   <span className="text-[10px] text-slate-500 font-mono">
@@ -435,7 +501,13 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard, o
                   </span>
                 </div>
 
-                <p className="text-xs leading-relaxed text-slate-800 bg-white/70 p-2.5 rounded-lg border border-slate-200/50">
+                {aiResult.detectedAreaDescription && (
+                  <div className="text-[11px] font-semibold text-slate-600 mb-1.5">
+                    Terdeteksi: <span className="font-mono text-slate-800">{aiResult.detectedAreaDescription}</span>
+                  </div>
+                )}
+
+                <p className="text-xs leading-relaxed text-slate-800 bg-white/80 p-2.5 rounded-lg border border-slate-200/50">
                   {aiResult.summary}
                 </p>
 
@@ -448,6 +520,20 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard, o
                       </li>
                     ))}
                   </ul>
+                )}
+
+                {!aiResult.isCorrectArea && (
+                  <button
+                    onClick={() => {
+                      setPhotoBase64(null);
+                      setAiResult(null);
+                      setTimeout(() => fileInputRef.current?.click(), 100);
+                    }}
+                    className="mt-3 w-full py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Ambil Foto Ulang Area Sebenarnya</span>
+                  </button>
                 )}
               </div>
             )}
@@ -526,7 +612,7 @@ export const CrewPiketFlow: React.FC<CrewPiketFlowProps> = ({ onGoToDashboard, o
               <button
                 onClick={() => {
                   setShowSuccessModal(false);
-                  onGoToDashboard();
+                  handleGoToSPV();
                 }}
                 className="w-full py-2 px-4 rounded-xl border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition-colors"
               >
