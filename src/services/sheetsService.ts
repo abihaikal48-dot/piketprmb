@@ -1,13 +1,16 @@
 import { PiketRecord } from '../types/piket';
 
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
-const STORAGE_SHEET_KEY = 'hara_chicken_spreadsheet_info';
+const STORAGE_SHEET_KEY = 'piket_cihuy_spreadsheet_info';
+const STORAGE_WEBHOOK_KEY = 'piket_cihuy_webhook_url';
 
 export interface SpreadsheetInfo {
-  id: string;
+  id?: string;
   url: string;
   title: string;
   sheetName: string;
+  type: 'oauth' | 'webhook';
+  webhookUrl?: string;
   createdTime: string;
 }
 
@@ -28,14 +31,64 @@ export const saveSpreadsheetInfo = (info: SpreadsheetInfo | null) => {
   }
 };
 
+export const saveWebhookConnection = (webhookUrl: string, sheetUrl?: string, title?: string): SpreadsheetInfo => {
+  const cleanWebhook = webhookUrl.trim();
+  const info: SpreadsheetInfo = {
+    title: title?.trim() || 'Google Spreadsheet (Webhook / Apps Script)',
+    url: sheetUrl?.trim() || cleanWebhook,
+    sheetName: 'Log Piket',
+    type: 'webhook',
+    webhookUrl: cleanWebhook,
+    createdTime: new Date().toISOString(),
+  };
+  saveSpreadsheetInfo(info);
+  return info;
+};
+
+// Send record to Google Sheet via Apps Script Webhook (Zero OAuth, Works on Vercel instantly!)
+export const appendRecordViaWebhook = async (
+  webhookUrl: string,
+  record: PiketRecord
+): Promise<boolean> => {
+  const payload = {
+    timestamp: `${record.date} ${record.time}`,
+    crewName: record.crewName,
+    shift: record.shift,
+    areaName: record.areaName,
+    areaCode: record.areaCode,
+    aiStatus: record.aiVerification.status === 'BERSIH_SESUAI_STANDAR' ? 'BERSIH (STANDAR)' : 'PERLU TINDAK LANJUT',
+    aiSummary: record.aiVerification.summary,
+    aiFindings: record.aiVerification.findings.join('; '),
+    spvStatus: record.spvStatus === 'APPROVED' ? 'DISETUJUI SPV' : record.spvStatus === 'REVISION_NEEDED' ? 'PERLU REVISI' : 'PENDING SPV',
+    spvNotes: record.spvNotes || '-',
+    id: record.id,
+  };
+
+  try {
+    // Send as JSON with text/plain to prevent CORS preflight in Apps Script
+    await fetch(webhookUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify(payload),
+    });
+    return true;
+  } catch (err) {
+    console.error('Error posting to Google Sheets Webhook:', err);
+    throw err;
+  }
+};
+
+// OAuth methods
 export const createPiketSpreadsheet = async (
   accessToken: string,
-  outletName = 'Hara Chicken Outlet Pusat'
+  outletName = 'Piket Cihuy Outlet'
 ): Promise<SpreadsheetInfo> => {
-  const title = `${outletName} - Log Piket Kru & Kebersihan`;
+  const title = `${outletName} - Log Kebersihan`;
   const sheetName = 'Log Piket';
 
-  // 1. Create Spreadsheet
   const createRes = await fetch(SHEETS_API_BASE, {
     method: 'POST',
     headers: {
@@ -43,16 +96,12 @@ export const createPiketSpreadsheet = async (
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      properties: {
-        title,
-      },
+      properties: { title },
       sheets: [
         {
           properties: {
             title: sheetName,
-            gridProperties: {
-              frozenRowCount: 1,
-            },
+            gridProperties: { frozenRowCount: 1 },
           },
         },
       ],
@@ -68,7 +117,6 @@ export const createPiketSpreadsheet = async (
   const spreadsheetId = createData.spreadsheetId;
   const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
 
-  // 2. Insert Header row
   const headers = [
     [
       'Waktu Kirim (WIB)',
@@ -102,6 +150,7 @@ export const createPiketSpreadsheet = async (
     url: spreadsheetUrl,
     title,
     sheetName,
+    type: 'oauth',
     createdTime: new Date().toISOString(),
   };
 

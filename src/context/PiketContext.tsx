@@ -19,7 +19,10 @@ import {
   SpreadsheetInfo,
   getSavedSpreadsheetInfo,
   createPiketSpreadsheet,
-  appendPiketRecordToSheet
+  appendPiketRecordToSheet,
+  appendRecordViaWebhook,
+  saveWebhookConnection,
+  saveSpreadsheetInfo
 } from '../services/sheetsService';
 import { getCachedAccessToken } from '../services/authService';
 
@@ -40,6 +43,7 @@ interface PiketContextType {
   updateScheduleAssignment: (date: string, shift: ShiftType, areaId: string, crewId: string) => void;
   addNewCrew: (name: string, role: CrewMember['role'], phone?: string) => void;
   connectGoogleSpreadsheet: (token: string, email: string) => Promise<SpreadsheetInfo>;
+  connectWebhookSpreadsheet: (webhookUrl: string, sheetUrl?: string, title?: string) => SpreadsheetInfo;
   disconnectGoogleSpreadsheet: () => void;
   syncRecordToGoogleSheets: (recordId: string) => Promise<boolean>;
   syncAllPendingToSheets: () => Promise<number>;
@@ -49,9 +53,9 @@ interface PiketContextType {
 const PiketContext = createContext<PiketContextType | undefined>(undefined);
 
 const STORAGE_KEYS = {
-  RECORDS: 'hara_chicken_piket_records',
-  SCHEDULES: 'hara_chicken_piket_schedules',
-  CREW: 'hara_chicken_piket_crew',
+  RECORDS: 'piket_cihuy_records',
+  SCHEDULES: 'piket_cihuy_schedules',
+  CREW: 'piket_cihuy_crew',
 };
 
 export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -90,11 +94,10 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [activeShift, setActiveShift] = useState<ShiftType>(getCurrentShift());
   const [selectedArea, setSelectedArea] = useState<PiketArea | null>(null);
 
-  // Sheets state
+  // Sheets state (supports webhook and OAuth)
   const [spreadsheetInfo, setSpreadsheetInfo] = useState<SpreadsheetInfo | null>(getSavedSpreadsheetInfo);
   const [googleUserEmail, setGoogleUserEmail] = useState<string | null>(null);
 
-  // Save changes
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(records));
   }, [records]);
@@ -107,7 +110,7 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem(STORAGE_KEYS.CREW, JSON.stringify(crewList));
   }, [crewList]);
 
-  // Check URL parameters for direct QR scan: ?area=fryer-station
+  // Handle URL query ?area=...
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const areaParam = params.get('area');
@@ -124,7 +127,6 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSelectedArea(found || null);
   };
 
-  // Find crew member automatically assigned for this area today
   const getAssignedCrewForArea = (areaId: string, shift: ShiftType = activeShift): CrewMember | null => {
     const today = getTodayDateString();
     const sched = schedules.find(s => s.date === today && s.shift === shift);
@@ -146,7 +148,7 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const newRecord: PiketRecord = {
       ...recordData,
-      id: `piket-${Date.now()}`,
+      id: `cihuy-${Date.now()}`,
       timestamp: now.toISOString(),
       date: dateStr,
       time: timeStr,
@@ -154,26 +156,38 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       syncedToSheets: false,
     };
 
-    // If Google Sheet is connected and token available, sync right away
-    const token = getCachedAccessToken();
-    if (token && spreadsheetInfo?.id) {
-      try {
-        await appendPiketRecordToSheet(token, spreadsheetInfo.id, spreadsheetInfo.sheetName, newRecord);
-        newRecord.syncedToSheets = true;
-        newRecord.syncedAt = timeStr;
-      } catch (err) {
-        console.warn('Auto sync to sheets failed, saved locally:', err);
+    // Auto-sync to Google Sheet if connected
+    if (spreadsheetInfo) {
+      if (spreadsheetInfo.type === 'webhook' && spreadsheetInfo.webhookUrl) {
+        try {
+          await appendRecordViaWebhook(spreadsheetInfo.webhookUrl, newRecord);
+          newRecord.syncedToSheets = true;
+          newRecord.syncedAt = timeStr;
+        } catch (err) {
+          console.warn('Webhook sync failed, saving locally:', err);
+        }
+      } else if (spreadsheetInfo.type === 'oauth' && spreadsheetInfo.id) {
+        const token = getCachedAccessToken();
+        if (token) {
+          try {
+            await appendPiketRecordToSheet(token, spreadsheetInfo.id, spreadsheetInfo.sheetName, newRecord);
+            newRecord.syncedToSheets = true;
+            newRecord.syncedAt = timeStr;
+          } catch (err) {
+            console.warn('OAuth sync to sheets failed, saving locally:', err);
+          }
+        }
       }
     }
 
     setRecords(prev => [newRecord, ...prev]);
 
-    // Also persist to server endpoint in background
+    // Background server log
     fetch('/api/piket/records', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newRecord),
-    }).catch(e => console.warn('Server persist note:', e));
+    }).catch(() => {});
 
     return newRecord;
   };
@@ -192,8 +206,8 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           return {
             ...r,
             spvStatus: status,
-            spvNotes: notes || (status === 'APPROVED' ? 'Disetujui oleh SPV' : 'Perlu pembersihan ulang'),
-            spvApprovedBy: 'Kepala Outlet / SPV',
+            spvNotes: notes || (status === 'APPROVED' ? 'Disetujui SPV' : 'Perlu diseka ulang'),
+            spvApprovedBy: 'SPV Piket Cihuy',
             spvApprovedAt: timeStr,
           };
         }
@@ -201,12 +215,11 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       })
     );
 
-    // Call server endpoint
     fetch(`/api/piket/records/${recordId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ spvStatus: status, spvNotes: notes }),
-    }).catch(e => console.warn('Server patch note:', e));
+    }).catch(() => {});
   };
 
   const updateScheduleAssignment = (
@@ -256,48 +269,69 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const connectGoogleSpreadsheet = async (token: string, email: string): Promise<SpreadsheetInfo> => {
-    const info = await createPiketSpreadsheet(token, 'Hara Chicken Outlet');
+    const info = await createPiketSpreadsheet(token, 'Piket Cihuy');
     setSpreadsheetInfo(info);
     setGoogleUserEmail(email);
     return info;
   };
 
+  const connectWebhookSpreadsheet = (webhookUrl: string, sheetUrl?: string, title?: string): SpreadsheetInfo => {
+    const info = saveWebhookConnection(webhookUrl, sheetUrl, title);
+    setSpreadsheetInfo(info);
+    return info;
+  };
+
   const disconnectGoogleSpreadsheet = () => {
+    saveSpreadsheetInfo(null);
     setSpreadsheetInfo(null);
     setGoogleUserEmail(null);
   };
 
   const syncRecordToGoogleSheets = async (recordId: string): Promise<boolean> => {
-    const token = getCachedAccessToken();
-    if (!token || !spreadsheetInfo?.id) return false;
-
+    if (!spreadsheetInfo) return false;
     const record = records.find(r => r.id === recordId);
     if (!record) return false;
 
     try {
-      await appendPiketRecordToSheet(token, spreadsheetInfo.id, spreadsheetInfo.sheetName, record);
+      if (spreadsheetInfo.type === 'webhook' && spreadsheetInfo.webhookUrl) {
+        await appendRecordViaWebhook(spreadsheetInfo.webhookUrl, record);
+      } else if (spreadsheetInfo.type === 'oauth' && spreadsheetInfo.id) {
+        const token = getCachedAccessToken();
+        if (!token) return false;
+        await appendPiketRecordToSheet(token, spreadsheetInfo.id, spreadsheetInfo.sheetName, record);
+      } else {
+        return false;
+      }
+
       setRecords(prev =>
         prev.map(r => (r.id === recordId ? { ...r, syncedToSheets: true, syncedAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) } : r))
       );
       return true;
     } catch (err) {
-      console.error('Error syncing record to sheet:', err);
+      console.error('Error syncing record:', err);
       return false;
     }
   };
 
   const syncAllPendingToSheets = async (): Promise<number> => {
-    const token = getCachedAccessToken();
-    if (!token || !spreadsheetInfo?.id) return 0;
-
+    if (!spreadsheetInfo) return 0;
     const pending = records.filter(r => !r.syncedToSheets);
     let count = 0;
+
     for (const r of pending) {
       try {
-        await appendPiketRecordToSheet(token, spreadsheetInfo.id, spreadsheetInfo.sheetName, r);
-        count++;
+        if (spreadsheetInfo.type === 'webhook' && spreadsheetInfo.webhookUrl) {
+          await appendRecordViaWebhook(spreadsheetInfo.webhookUrl, r);
+          count++;
+        } else if (spreadsheetInfo.type === 'oauth' && spreadsheetInfo.id) {
+          const token = getCachedAccessToken();
+          if (token) {
+            await appendPiketRecordToSheet(token, spreadsheetInfo.id, spreadsheetInfo.sheetName, r);
+            count++;
+          }
+        }
       } catch (err) {
-        console.error('Failed syncing record:', r.id, err);
+        console.error('Failed syncing:', r.id, err);
       }
     }
 
@@ -320,7 +354,7 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         activeShift,
         selectedArea,
         spreadsheetInfo,
-        isSheetsConnected: !!spreadsheetInfo?.id,
+        isSheetsConnected: !!spreadsheetInfo,
         googleUserEmail,
         selectAreaById,
         getAssignedCrewForArea,
@@ -329,6 +363,7 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateScheduleAssignment,
         addNewCrew,
         connectGoogleSpreadsheet,
+        connectWebhookSpreadsheet,
         disconnectGoogleSpreadsheet,
         syncRecordToGoogleSheets,
         syncAllPendingToSheets,

@@ -13,13 +13,16 @@ import {
   FileSpreadsheet,
   Download,
   Eye,
-  MessageSquare,
+  Link,
+  Code2,
+  Copy,
+  Info,
   ShieldCheck,
   Sparkles
 } from 'lucide-react';
 import { usePiket } from '../context/PiketContext';
-import { PiketRecord, ShiftType } from '../types/piket';
-import { signInWithGoogle, logoutGoogle } from '../services/authService';
+import { PiketRecord } from '../types/piket';
+import { signInWithGoogle } from '../services/authService';
 
 export const SPVDashboard: React.FC = () => {
   const {
@@ -30,6 +33,7 @@ export const SPVDashboard: React.FC = () => {
     isSheetsConnected,
     googleUserEmail,
     connectGoogleSpreadsheet,
+    connectWebhookSpreadsheet,
     disconnectGoogleSpreadsheet,
     updateRecordSPVStatus,
     syncRecordToGoogleSheets,
@@ -44,9 +48,15 @@ export const SPVDashboard: React.FC = () => {
   const [spvNoteInput, setSpvNoteInput] = useState('');
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
-  const [syncSuccessToast, setSyncSuccessToast] = useState<string | null>(null);
+  const [syncToast, setSyncToast] = useState<string | null>(null);
 
-  // Statistics calculation for current active shift
+  // Webhook setup modal / form for Vercel
+  const [showWebhookSetup, setShowWebhookSetup] = useState(false);
+  const [webhookInputUrl, setWebhookInputUrl] = useState(spreadsheetInfo?.webhookUrl || '');
+  const [sheetUrlInput, setSheetUrlInput] = useState(spreadsheetInfo?.url || '');
+  const [copiedScript, setCopiedScript] = useState(false);
+  const [oauthErrorNotice, setOauthErrorNotice] = useState<string | null>(null);
+
   const today = new Date().toISOString().split('T')[0];
   const todayShiftRecords = records.filter(r => r.date === today && r.shift === activeShift);
 
@@ -66,7 +76,6 @@ export const SPVDashboard: React.FC = () => {
 
   const unsyncedCount = records.filter(r => !r.syncedToSheets).length;
 
-  // Filter records
   const filteredRecords = records.filter(record => {
     if (filterShift !== 'all' && record.shift !== filterShift) return false;
     if (filterArea !== 'all' && record.areaId !== filterArea) return false;
@@ -80,28 +89,68 @@ export const SPVDashboard: React.FC = () => {
     return true;
   });
 
-  // Handle Google OAuth Sign In
-  const handleGoogleConnect = async () => {
+  const handleGoogleOAuthConnect = async () => {
+    setOauthErrorNotice(null);
     try {
       setIsSigningIn(true);
       const { user, accessToken } = await signInWithGoogle();
       const info = await connectGoogleSpreadsheet(accessToken, user.email || 'Akun Google');
-      setSyncSuccessToast(`Google Spreadsheet terhubung: ${info.title}`);
-      setTimeout(() => setSyncSuccessToast(null), 4000);
+      setSyncToast(`Google Spreadsheet terhubung: ${info.title}`);
+      setTimeout(() => setSyncToast(null), 4000);
     } catch (err: any) {
       console.error('Sign in Google error:', err);
-      alert('Gagal menghubungkan Google Sheets: ' + (err.message || 'Coba lagi'));
+      setOauthErrorNotice(err.message || 'Gagal login Google.');
+      // Auto suggest webhook on Vercel
+      setShowWebhookSetup(true);
     } finally {
       setIsSigningIn(false);
     }
+  };
+
+  const handleSaveWebhook = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!webhookInputUrl.trim()) return;
+
+    connectWebhookSpreadsheet(webhookInputUrl.trim(), sheetUrlInput.trim(), 'Piket Cihuy - Google Sheets');
+    setShowWebhookSetup(false);
+    setSyncToast('Google Sheets Webhook berhasil dihubungkan!');
+    setTimeout(() => setSyncToast(null), 3500);
+  };
+
+  const sampleAppsScriptCode = `function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(["Waktu", "Nama Kru", "Shift", "Area", "Kode", "Status AI", "Ringkasan AI", "Temuan Detail", "Status SPV", "Catatan SPV", "ID"]);
+  }
+  var data = JSON.parse(e.postData.contents);
+  sheet.appendRow([
+    data.timestamp,
+    data.crewName,
+    data.shift,
+    data.areaName,
+    data.areaCode,
+    data.aiStatus,
+    data.aiSummary,
+    data.aiFindings,
+    data.spvStatus,
+    data.spvNotes,
+    data.id
+  ]);
+  return ContentService.createTextOutput("OK").setMimeType(ContentService.MimeType.TEXT);
+}`;
+
+  const copyScriptToClipboard = () => {
+    navigator.clipboard.writeText(sampleAppsScriptCode);
+    setCopiedScript(true);
+    setTimeout(() => setCopiedScript(false), 2500);
   };
 
   const handleSyncAll = async () => {
     setIsSyncingAll(true);
     try {
       const count = await syncAllPendingToSheets();
-      setSyncSuccessToast(`Berhasil menyinkronkan ${count} laporan ke Google Sheets!`);
-      setTimeout(() => setSyncSuccessToast(null), 3500);
+      setSyncToast(`Tersinkron ${count} laporan ke Google Sheets!`);
+      setTimeout(() => setSyncToast(null), 3500);
     } catch (err) {
       console.error('Sync all error:', err);
     } finally {
@@ -112,10 +161,10 @@ export const SPVDashboard: React.FC = () => {
   const handleSyncSingle = async (recordId: string) => {
     const success = await syncRecordToGoogleSheets(recordId);
     if (success) {
-      setSyncSuccessToast('Laporan berhasil disinkronkan ke Google Sheets');
-      setTimeout(() => setSyncSuccessToast(null), 2500);
+      setSyncToast('Laporan berhasil disinkronkan ke Google Sheets');
+      setTimeout(() => setSyncToast(null), 2500);
     } else {
-      alert('Pastikan Google Sheets telah terhubung untuk menyinkronkan data.');
+      setShowWebhookSetup(true);
     }
   };
 
@@ -136,267 +185,228 @@ export const SPVDashboard: React.FC = () => {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Hara_Chicken_Log_Piket_${today}.csv`);
+    link.setAttribute('download', `Piket_Cihuy_${today}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-6">
-      {/* Toast Notification */}
-      {syncSuccessToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl border border-slate-700 flex items-center gap-2.5 animate-bounce text-xs font-semibold">
+    <div className="max-w-6xl mx-auto px-3.5 sm:px-6 py-4 sm:py-6 space-y-5">
+      {/* Toast Alert */}
+      {syncToast && (
+        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-lg border border-slate-700 flex items-center gap-2 text-xs font-semibold">
           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>{syncSuccessToast}</span>
+          <span>{syncToast}</span>
         </div>
       )}
 
-      {/* Header & Title */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Header bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-700 text-xs font-bold uppercase tracking-wider mb-2">
-            <BarChart3 className="w-3.5 h-3.5" />
-            Panel Pengawas / Kepala Outlet
+          <span className="text-[10px] font-extrabold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-md uppercase tracking-wider">
+            Portal Pengawas & SPV
           </span>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Monitoring Piket & Verifikasi Kebersihan
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-1">
+            Monitoring Piket Cihuy
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Pantau kepatuhan piket kru Hara Chicken per shift, periksa hasil foto visual AI, dan kelola database Google Sheets.
+          <p className="text-xs text-slate-500">
+            Rekap kebersihan shift {activeShift.split(' ')[0]}, persetujuan laporan, dan database Google Sheets.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={exportCSV}
-            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-2xs transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-2xs"
           >
-            <Download className="w-4 h-4 text-slate-500" />
+            <Download className="w-3.5 h-3.5" />
             <span>Ekspor CSV</span>
           </button>
         </div>
       </div>
 
-      {/* KPI Shift Compliance Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Kepatuhan Shift</span>
-            <span className="p-2 rounded-xl bg-red-50 text-red-600 font-bold text-xs">
-              {activeShift.split(' ')[0]}
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs">
+          <span className="text-[11px] font-bold text-slate-500 uppercase">Kepatuhan Shift</span>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-slate-900">{progressPercent}%</span>
+            <span className="text-[11px] text-slate-500 font-semibold">
+              ({completedCleanCount}/{totalAreas})
             </span>
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-slate-900">{progressPercent}%</span>
-            <span className="text-xs text-slate-500 font-semibold">
-              ({completedCleanCount}/{totalAreas} Area)
-            </span>
-          </div>
-          {/* Progress bar */}
-          <div className="w-full bg-slate-100 rounded-full h-2 mt-3 overflow-hidden">
-            <div
-              className="bg-red-600 h-2 rounded-full transition-all duration-500"
-              style={{ width: `${progressPercent}%` }}
-            />
+          <div className="w-full bg-slate-100 rounded-full h-1.5 mt-2 overflow-hidden">
+            <div className="bg-red-600 h-1.5 rounded-full" style={{ width: `${progressPercent}%` }} />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Bersih Sesuai Standar</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-3xl font-extrabold text-emerald-700">{completedCleanCount}</span>
-            <span className="text-xs text-slate-500 ml-2 font-medium">Area tervalidasi AI</span>
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs">
+          <span className="text-[11px] font-bold text-emerald-700 uppercase">Bersih Standar</span>
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-2xl font-black text-emerald-700">{completedCleanCount}</span>
+            <span className="text-[11px] text-slate-400">Area lolos</span>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Perlu Tindak Lanjut</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
-              <AlertTriangle className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-3xl font-extrabold text-amber-700">{needAttentionCount}</span>
-            <span className="text-xs text-slate-500 ml-2 font-medium">Ada catatan / noda</span>
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs">
+          <span className="text-[11px] font-bold text-amber-700 uppercase">Perlu Tindak Lanjut</span>
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-2xl font-black text-amber-700">{needAttentionCount}</span>
+            <span className="text-[11px] text-slate-400">Ada catatan</span>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Belum Dikerjakan</span>
-            <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold">
-              <Clock className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-3xl font-extrabold text-slate-700">
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs">
+          <span className="text-[11px] font-bold text-slate-500 uppercase">Belum Piket</span>
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-2xl font-black text-slate-700">
               {Math.max(0, totalAreas - todayShiftRecords.length)}
             </span>
-            <span className="text-xs text-slate-500 ml-2 font-medium">Titik stiker QR</span>
+            <span className="text-[11px] text-slate-400">Titik QR</span>
           </div>
         </div>
       </div>
 
-      {/* Google Sheets Integration Card */}
-      <div className="bg-gradient-to-r from-emerald-900 to-teal-950 text-white rounded-3xl p-6 shadow-md border border-emerald-800/50 flex flex-col md:flex-row md:items-center justify-between gap-5">
+      {/* GOOGLE SHEETS CONNECTION BOX (OPTIMIZED FOR VERCEL & SPREADSHEETS) */}
+      <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 rounded-2xl p-4 sm:p-5 text-white shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1 max-w-xl">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider">
-              Database Sentral Google Sheets
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-300">
+              Database Google Sheets
             </span>
           </div>
-          <h3 className="text-lg sm:text-xl font-extrabold tracking-tight">
-            {isSheetsConnected && spreadsheetInfo
-              ? spreadsheetInfo.title
-              : 'Hubungkan Google Spreadsheet Outlet'}
+          <h3 className="text-base sm:text-lg font-black tracking-tight">
+            {isSheetsConnected
+              ? spreadsheetInfo?.title || 'Google Spreadsheet Terhubung'
+              : 'Hubungkan Google Sheets (Solusi Vercel)'}
           </h3>
           <p className="text-xs text-emerald-100/80 leading-relaxed">
             {isSheetsConnected
-              ? `Terhubung dengan ${googleUserEmail || 'Google Workspace'}. Setiap laporan piket otomatis tersimpan rapi baris demi baris di Google Sheets.`
-              : 'Aktifkan integrasi resmi Google Sheets untuk mencatat seluruh log piket, nama kru, waktu kirim, dan hasil verifikasi AI secara otomatis.'}
+              ? `Tersambung via ${spreadsheetInfo?.type === 'webhook' ? 'Google Apps Script (Vercel Ready)' : 'Google OAuth'}. Setiap piket langsung otomatis tercatat di spreadsheet.`
+              : 'Gunakan metode Webhook Google Apps Script (bebas batas domain Vercel) atau Google Sign-in.'}
           </p>
 
-          {isSheetsConnected && unsyncedCount > 0 && (
-            <p className="text-xs text-amber-300 font-bold mt-1">
-              • Terdapat {unsyncedCount} laporan baru yang siap disinkronkan ke Sheets.
-            </p>
+          {oauthErrorNotice && (
+            <div className="p-2.5 rounded-lg bg-red-950/80 border border-red-500/50 text-[11px] text-red-200 mt-2">
+              <p className="font-bold text-white mb-0.5">Catatan Domain Vercel:</p>
+              <p>{oauthErrorNotice}</p>
+            </div>
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {isSheetsConnected && spreadsheetInfo ? (
             <>
-              <a
-                href={spreadsheetInfo.url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md transition-all"
-              >
-                <ExternalLink className="w-4 h-4" />
-                <span>Buka Google Spreadsheet</span>
-              </a>
+              {spreadsheetInfo.url && (
+                <a
+                  href={spreadsheetInfo.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-xs transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Buka Spreadsheet</span>
+                </a>
+              )}
 
               {unsyncedCount > 0 && (
                 <button
                   disabled={isSyncingAll}
                   onClick={handleSyncAll}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-xs backdrop-blur-md transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-xs transition-colors"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isSyncingAll ? 'animate-spin' : ''}`} />
-                  <span>Sync ({unsyncedCount}) Baris</span>
+                  <span>Sync ({unsyncedCount})</span>
                 </button>
               )}
 
               <button
-                onClick={disconnectGoogleSpreadsheet}
-                className="text-xs text-emerald-300 hover:text-white underline underline-offset-2 ml-1"
+                onClick={() => setShowWebhookSetup(true)}
+                className="px-2.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs text-white"
+                title="Ubah URL Webhook"
               >
-                Putuskan
+                Pengaturan
+              </button>
+
+              <button
+                onClick={disconnectGoogleSpreadsheet}
+                className="text-xs text-emerald-300 hover:text-white underline ml-1"
+              >
+                Putus
               </button>
             </>
           ) : (
-            <button
-              disabled={isSigningIn}
-              onClick={handleGoogleConnect}
-              className="flex items-center gap-3 px-5 py-3 rounded-xl bg-white text-slate-800 hover:bg-slate-50 font-bold text-xs sm:text-sm shadow-lg transition-all"
-            >
-              {/* Google G Logo SVG */}
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                />
-              </svg>
-              <span>{isSigningIn ? 'Menghubungkan...' : 'Sign in & Buat Spreadsheet Otomatis'}</span>
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setShowWebhookSetup(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-sm transition-all"
+              >
+                <Link className="w-4 h-4" />
+                <span>Sambungkan Webhook (Rekomendasi Vercel)</span>
+              </button>
+
+              <button
+                disabled={isSigningIn}
+                onClick={handleGoogleOAuthConnect}
+                className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition-all"
+              >
+                <span>{isSigningIn ? 'Loading...' : 'Login Google'}</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2.5 flex-1">
-          {/* Search */}
-          <div className="relative min-w-[200px] flex-1 sm:flex-initial">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+      {/* FILTER & SEARCH */}
+      <div className="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 flex-1">
+          <div className="relative min-w-[180px] flex-1 sm:flex-initial">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Cari nama kru atau area..."
+              placeholder="Cari kru / area..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full text-xs font-semibold pl-9 pr-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:ring-2 focus:ring-red-500 focus:outline-hidden"
+              className="w-full text-xs font-semibold pl-8 pr-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800"
             />
           </div>
 
-          {/* Area Filter */}
           <select
             value={filterArea}
             onChange={(e) => setFilterArea(e.target.value)}
-            className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700"
+            className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-slate-700"
           >
-            <option value="all">Semua Area Piket</option>
+            <option value="all">Semua Area</option>
             {areas.map(a => (
               <option key={a.id} value={a.id}>{a.name}</option>
             ))}
           </select>
 
-          {/* Shift Filter */}
-          <select
-            value={filterShift}
-            onChange={(e) => setFilterShift(e.target.value)}
-            className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700"
-          >
-            <option value="all">Semua Shift</option>
-            <option value="Pagi (08:00 - 15:00)">Shift Pagi</option>
-            <option value="Sore / Closing (15:00 - 22:30)">Shift Sore / Closing</option>
-          </select>
-
-          {/* Status AI Filter */}
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700"
+            className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-slate-700"
           >
             <option value="all">Semua Status AI</option>
-            <option value="BERSIH_SESUAI_STANDAR">Bersih Sesuai Standar</option>
-            <option value="PERLU_TINDAKLANJUT">Perlu Tindak Lanjut</option>
+            <option value="BERSIH_SESUAI_STANDAR">Bersih Standar</option>
+            <option value="PERLU_TINDAKLANJUT">Perlu Revisi</option>
           </select>
         </div>
 
-        <span className="text-xs font-bold text-slate-500">
-          Menampilkan {filteredRecords.length} Catatan
+        <span className="text-[11px] font-bold text-slate-400">
+          {filteredRecords.length} Data
         </span>
       </div>
 
-      {/* Piket Records List / Cards */}
-      <div className="space-y-3">
+      {/* RECORDS LIST */}
+      <div className="space-y-2.5">
         {filteredRecords.length === 0 ? (
-          <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-xs">
-            <CheckCircle2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h3 className="font-bold text-slate-700 text-base">Belum Ada Laporan Piket</h3>
-            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              Laporan yang dikirim oleh kru melalui scan QR area akan langsung muncul di sini secara real-time.
-            </p>
+          <div className="bg-white rounded-2xl p-10 text-center border border-slate-200 shadow-2xs">
+            <CheckCircle2 className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+            <h3 className="font-bold text-slate-700 text-sm">Belum Ada Laporan</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Laporan kru dari scan QR akan tampil di sini.</p>
           </div>
         ) : (
           filteredRecords.map((record) => {
@@ -405,108 +415,89 @@ export const SPVDashboard: React.FC = () => {
             return (
               <div
                 key={record.id}
-                className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 hover:border-slate-300 shadow-xs transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200 hover:border-slate-300 shadow-2xs transition-all flex flex-col md:flex-row md:items-center justify-between gap-3"
               >
-                {/* Left: Thumbnail & Core Info */}
-                <div className="flex items-start gap-4 flex-1">
+                {/* Left side */}
+                <div className="flex items-start gap-3 flex-1">
                   <div
                     onClick={() => setSelectedRecordForDetail(record)}
-                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-slate-100 shrink-0 cursor-pointer relative group border border-slate-200 shadow-2xs"
+                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-slate-100 shrink-0 cursor-pointer border border-slate-200"
                   >
                     <img
                       src={record.photoBase64}
                       alt={record.areaName}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      className="w-full h-full object-cover hover:scale-105 transition-transform"
                     />
-                    <div className="absolute inset-0 bg-slate-900/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-                      <Eye className="w-5 h-5" />
-                    </div>
                   </div>
 
-                  <div className="space-y-1 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                  <div className="space-y-1 flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-mono text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
                         {record.areaCode}
                       </span>
-                      <span className="text-xs font-bold text-slate-900">{record.areaName}</span>
-                      <span className="text-xs text-slate-400">•</span>
-                      <span className="text-xs text-slate-500 font-medium">Shift {record.shift.split(' ')[0]}</span>
+                      <span className="text-xs font-extrabold text-slate-900 truncate">
+                        {record.areaName}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        • {record.shift.split(' ')[0]}
+                      </span>
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs text-slate-600">
-                      <span className="font-bold text-slate-800">{record.crewName}</span>
-                      <span className="text-slate-400">mengirim pada</span>
-                      <span className="font-semibold text-slate-700">{record.date}, {record.time} WIB</span>
-                    </div>
+                    <p className="text-xs text-slate-600">
+                      <strong className="text-slate-900">{record.crewName}</strong> • {record.date}, {record.time} WIB
+                    </p>
 
-                    {/* AI Summary Badge */}
-                    <div className="pt-1.5 flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                       <span
-                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                          isClean
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        className={`text-[9px] font-black px-2 py-0.2 rounded-full ${
+                          isClean ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                         }`}
                       >
-                        {isClean ? 'AI: Bersih Sesuai Standar' : 'AI: Perlu Perhatian'}
+                        {isClean ? 'AI: BERSIH' : 'AI: PERLU CEK'}
                       </span>
-
-                      <p className="text-xs text-slate-600 line-clamp-1 italic max-w-md">
+                      <p className="text-[11px] text-slate-500 italic truncate max-w-sm">
                         "{record.aiVerification.summary}"
                       </p>
                     </div>
-
-                    {/* SPV Note if exists */}
-                    {record.spvNotes && (
-                      <p className="text-[11px] text-blue-700 bg-blue-50/70 px-2 py-0.5 rounded-md inline-block">
-                        Catatan SPV: {record.spvNotes}
-                      </p>
-                    )}
                   </div>
                 </div>
 
-                {/* Right: Actions & Status */}
-                <div className="flex flex-wrap items-center justify-end gap-2 border-t md:border-t-0 pt-3 md:pt-0">
-                  {/* Sheets sync status pill */}
+                {/* Right side actions */}
+                <div className="flex items-center justify-end gap-2 border-t md:border-t-0 pt-2 md:pt-0">
                   {record.syncedToSheets ? (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg flex items-center gap-1">
                       <FileSpreadsheet className="w-3 h-3 text-emerald-600" />
-                      <span>Di Sheets</span>
+                      <span>Sheets OK</span>
                     </span>
                   ) : (
                     <button
                       onClick={() => handleSyncSingle(record.id)}
-                      className="text-[10px] font-bold text-slate-600 hover:text-emerald-700 bg-slate-50 hover:bg-emerald-50 border border-slate-200 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors"
-                      title="Kirim baris ini ke Google Spreadsheet"
+                      className="text-[10px] font-bold text-slate-600 hover:text-emerald-700 bg-slate-100 px-2 py-1 rounded-lg flex items-center gap-1"
                     >
                       <FileSpreadsheet className="w-3 h-3" />
-                      <span>Sync ke Sheets</span>
+                      <span>Sync</span>
                     </button>
                   )}
 
-                  {/* SPV Approval status / quick buttons */}
                   {record.spvStatus === 'APPROVED' ? (
-                    <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-xl flex items-center gap-1">
-                      <Check className="w-3.5 h-3.5 stroke-[3]" />
-                      <span>Disetujui SPV</span>
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-xl">
+                      ✓ Disetujui
                     </span>
                   ) : record.spvStatus === 'REVISION_NEEDED' ? (
-                    <span className="text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1.5 rounded-xl flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      <span>Minta Revisi</span>
+                    <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-xl">
+                      Revisi
                     </span>
                   ) : (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       <button
                         onClick={() => updateRecordSPVStatus(record.id, 'APPROVED')}
-                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-colors"
+                        className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
                       >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Setujui</span>
+                        Setujui
                       </button>
                       <button
                         onClick={() => updateRecordSPVStatus(record.id, 'REVISION_NEEDED', 'Perlu diseka ulang')}
-                        className="px-2.5 py-1.5 rounded-xl border border-slate-200 hover:bg-amber-50 text-amber-800 font-semibold text-xs transition-colors"
+                        className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-amber-100 text-slate-700 font-bold text-xs"
                       >
                         Revisi
                       </button>
@@ -515,8 +506,7 @@ export const SPVDashboard: React.FC = () => {
 
                   <button
                     onClick={() => setSelectedRecordForDetail(record)}
-                    className="p-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 transition-colors"
-                    title="Buka detail foto dan analisis AI"
+                    className="p-1.5 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-100"
                   >
                     <Eye className="w-4 h-4" />
                   </button>
@@ -527,151 +517,176 @@ export const SPVDashboard: React.FC = () => {
         )}
       </div>
 
-      {/* DETAIL MODAL: PHOTO + FULL AI FINDINGS + SPV REVIEW */}
-      {selectedRecordForDetail && (
+      {/* WEBHOOK SETUP MODAL (FOR VERCEL ZERO-OAUTH SYNC) */}
+      {showWebhookSetup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            {/* Modal Header */}
-            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-red-400 bg-red-950/60 px-2 py-0.5 rounded">
-                    {selectedRecordForDetail.areaCode}
-                  </span>
-                  <h3 className="font-bold text-base">{selectedRecordForDetail.areaName}</h3>
-                </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Petugas: {selectedRecordForDetail.crewName} • {selectedRecordForDetail.date}, {selectedRecordForDetail.time} WIB
-                </p>
+          <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Link className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-black text-base text-slate-900">
+                  Koneksi Google Sheets (Bebas Error Vercel)
+                </h3>
               </div>
               <button
-                onClick={() => setSelectedRecordForDetail(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                onClick={() => setShowWebhookSetup(false)}
+                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Modal Content Scrollable */}
-            <div className="p-6 overflow-y-auto space-y-4">
-              {/* Photo Viewport */}
-              <div className="rounded-2xl overflow-hidden bg-slate-950 border border-slate-200">
-                <img
-                  src={selectedRecordForDetail.photoBase64}
-                  alt={selectedRecordForDetail.areaName}
-                  className="w-full max-h-[350px] object-contain mx-auto"
+            <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-2xl text-xs text-emerald-950 space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                <span>Kenapa metode ini direkomendasikan untuk Vercel?</span>
+              </p>
+              <p className="text-emerald-900 leading-relaxed text-[11px]">
+                Google Apps Script Webhook bekerja tanpa OAuth popup (tidak akan terblokir oleh domain vercel.app), sehingga setiap kru yang mengirim piket akan otomatis langsung masuk ke spreadsheet Anda secara real-time!
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveWebhook} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  1. Buat Spreadsheet & Buka Extensions {'>'} Apps Script
+                </label>
+                <p className="text-[11px] text-slate-500 mb-1.5">
+                  Salin skrip sederhana berikut ke Apps Script Anda:
+                </p>
+                <div className="relative">
+                  <pre className="text-[10px] bg-slate-900 text-slate-100 p-3 rounded-xl overflow-x-auto font-mono max-h-36">
+                    {sampleAppsScriptCode}
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={copyScriptToClipboard}
+                    className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold flex items-center gap-1 shadow-xs"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>{copiedScript ? 'Tersalin!' : 'Salin Kode'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  2. Klik Deploy {'>'} New Deployment {'>'} Web App
+                </label>
+                <p className="text-[11px] text-slate-500">
+                  Pilih "Execute as: Me" dan "Who has access: Anyone". Lalu salin URL Web App yang dihasilkan.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  3. Tempel URL Web App Google Apps Script di sini:
+                </label>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://script.google.com/macros/s/.../exec"
+                  value={webhookInputUrl}
+                  onChange={(e) => setWebhookInputUrl(e.target.value)}
+                  className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-800 font-mono"
                 />
               </div>
 
-              {/* AI Verification Report */}
-              <div
-                className={`p-4 rounded-2xl border ${
-                  selectedRecordForDetail.aiVerification.status === 'BERSIH_SESUAI_STANDAR'
-                    ? 'bg-emerald-50/70 border-emerald-300'
-                    : 'bg-amber-50/80 border-amber-300'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-red-600" />
-                    <span className="text-xs font-bold text-slate-900 uppercase">
-                      Laporan Audit AI Gemini
-                    </span>
-                  </div>
-                  <span
-                    className={`text-xs font-extrabold px-2.5 py-0.5 rounded-full ${
-                      selectedRecordForDetail.aiVerification.status === 'BERSIH_SESUAI_STANDAR'
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-amber-600 text-white'
-                    }`}
-                  >
-                    {selectedRecordForDetail.aiVerification.status === 'BERSIH_SESUAI_STANDAR'
-                      ? 'BERSIH SESUAI STANDAR'
-                      : 'PERLU TINDAK LANJUT'}
-                  </span>
-                </div>
-
-                <p className="text-xs sm:text-sm text-slate-800 font-medium leading-relaxed">
-                  {selectedRecordForDetail.aiVerification.summary}
-                </p>
-
-                {/* Findings */}
-                {selectedRecordForDetail.aiVerification.findings?.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-slate-200/60">
-                    <p className="text-xs font-bold text-slate-800 mb-1">Temuan Visual Terdeteksi:</p>
-                    <ul className="text-xs text-slate-700 space-y-1">
-                      {selectedRecordForDetail.aiVerification.findings.map((f, i) => (
-                        <li key={i} className="flex items-start gap-1.5">
-                          <span className="text-red-500 font-bold">•</span>
-                          <span>{f}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  URL Google Spreadsheet Anda (Opsional, untuk tombol pintasan):
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+                  value={sheetUrlInput}
+                  onChange={(e) => setSheetUrlInput(e.target.value)}
+                  className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-800"
+                />
               </div>
 
-              {/* SPV Review Section */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  Keputusan Kepala Outlet / SPV:
-                </h4>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={() => {
-                      updateRecordSPVStatus(selectedRecordForDetail.id, 'APPROVED', spvNoteInput);
-                      setSelectedRecordForDetail(prev => prev ? { ...prev, spvStatus: 'APPROVED', spvNotes: spvNoteInput } : null);
-                    }}
-                    className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all ${
-                      selectedRecordForDetail.spvStatus === 'APPROVED'
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-50'
-                    }`}
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>Setujui (Lolos SOP)</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      updateRecordSPVStatus(selectedRecordForDetail.id, 'REVISION_NEEDED', spvNoteInput || 'Harap bersihkan ulang');
-                      setSelectedRecordForDetail(prev => prev ? { ...prev, spvStatus: 'REVISION_NEEDED', spvNotes: spvNoteInput } : null);
-                    }}
-                    className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all ${
-                      selectedRecordForDetail.spvStatus === 'REVISION_NEEDED'
-                        ? 'bg-amber-600 text-white'
-                        : 'bg-white border border-amber-300 text-amber-800 hover:bg-amber-50'
-                    }`}
-                  >
-                    <AlertTriangle className="w-4 h-4" />
-                    <span>Minta Bersihkan Ulang</span>
-                  </button>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                    Catatan Arahan untuk Kru:
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Contoh: Sangat baik, lanjutkan besok / Harap lap bagian bawah rak lagi"
-                    defaultValue={selectedRecordForDetail.spvNotes || ''}
-                    onChange={(e) => setSpvNoteInput(e.target.value)}
-                    className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-800 bg-white"
-                  />
-                </div>
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowWebhookSetup(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                >
+                  Tutup
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md"
+                >
+                  Simpan & Hubungkan
+                </button>
               </div>
-            </div>
+            </form>
+          </div>
+        </div>
+      )}
 
-            {/* Modal Footer */}
-            <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-              <span className="text-xs text-slate-500 font-mono">
-                ID: {selectedRecordForDetail.id}
-              </span>
+      {/* DETAIL MODAL */}
+      {selectedRecordForDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-xl rounded-3xl overflow-hidden shadow-2xl p-5 space-y-3.5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <span className="font-mono text-xs font-bold text-red-600 bg-red-50 px-1.5 py-0.2 rounded">
+                  {selectedRecordForDetail.areaCode}
+                </span>
+                <h3 className="font-extrabold text-base text-slate-900 mt-0.5">
+                  {selectedRecordForDetail.areaName}
+                </h3>
+              </div>
               <button
                 onClick={() => setSelectedRecordForDetail(null)}
-                className="px-4 py-2 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800"
+                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="rounded-xl overflow-hidden bg-slate-950 border border-slate-200">
+              <img
+                src={selectedRecordForDetail.photoBase64}
+                alt={selectedRecordForDetail.areaName}
+                className="w-full max-h-[300px] object-contain mx-auto"
+              />
+            </div>
+
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-700">Analisis AI Gemini:</span>
+                <span
+                  className={`font-black px-2 py-0.5 rounded-full text-[10px] ${
+                    selectedRecordForDetail.aiVerification.status === 'BERSIH_SESUAI_STANDAR'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {selectedRecordForDetail.aiVerification.status}
+                </span>
+              </div>
+              <p className="text-slate-800 bg-white p-2.5 rounded-lg border border-slate-200/60 leading-relaxed font-medium">
+                {selectedRecordForDetail.aiVerification.summary}
+              </p>
+
+              {selectedRecordForDetail.aiVerification.findings?.length > 0 && (
+                <ul className="text-slate-600 space-y-1 text-[11px] pt-1">
+                  {selectedRecordForDetail.aiVerification.findings.map((f, i) => (
+                    <li key={i} className="flex items-start gap-1">
+                      <span className="text-red-500 font-bold">•</span>
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="pt-2 flex items-center justify-end">
+              <button
+                onClick={() => setSelectedRecordForDetail(null)}
+                className="px-4 py-2 rounded-xl bg-slate-900 text-white font-bold text-xs"
               >
                 Tutup
               </button>

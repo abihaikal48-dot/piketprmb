@@ -15,7 +15,7 @@ export const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/spreadsheets');
 
-// In-memory token cache (NEVER put accessToken into localStorage/sessionStorage)
+// In-memory token cache
 let cachedAccessToken: string | null = null;
 let isSigningIn = false;
 
@@ -46,9 +46,21 @@ export const signInWithGoogle = async (): Promise<{ user: User; accessToken: str
     cachedAccessToken = credential.accessToken;
     isSigningIn = false;
     return { user: result.user, accessToken: credential.accessToken };
-  } catch (error) {
+  } catch (error: any) {
     isSigningIn = false;
     console.error('Google Sign In Error:', error);
+
+    if (error.code === 'auth/unauthorized-domain') {
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'domain Anda';
+      throw new Error(
+        `Domain "${currentHost}" belum diizinkan oleh Firebase Auth. Di Vercel, Anda dapat menggunakan metode Webhook / Apps Script yang sudah disediakan di Dashboard SPV (tidak perlu izin domain & langsung jalan), atau tambahkan "${currentHost}" di Firebase Console > Authentication > Settings > Authorized Domains.`
+      );
+    } else if (error.code === 'auth/popup-blocked') {
+      throw new Error('Jendela pop-up login Google terblokir oleh browser. Izinkan pop-up atau gunakan metode Webhook Google Sheets.');
+    } else if (error.code === 'auth/popup-closed-by-user') {
+      throw new Error('Jendela login ditutup sebelum selesai.');
+    }
+
     throw error;
   }
 };

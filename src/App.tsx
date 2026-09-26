@@ -7,51 +7,71 @@ import { SPVDashboard } from './components/SPVDashboard';
 import { QRStickerPrinter } from './components/QRStickerPrinter';
 
 function MainApp() {
-  const [activeTab, setActiveTab] = useState<'scan' | 'roster' | 'dashboard' | 'stickers'>('scan');
-  const { selectAreaById } = usePiket();
+  const [currentView, setCurrentView] = useState<'crew' | 'spv'>('crew');
+  const [spvTab, setSpvTab] = useState<'dashboard' | 'roster' | 'stickers'>('dashboard');
 
-  // Handle URL query param: ?area=fryer-station or ?tab=dashboard
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get('view');
     const tabParam = params.get('tab');
-    if (tabParam === 'roster' || tabParam === 'dashboard' || tabParam === 'stickers') {
-      setActiveTab(tabParam);
+    const areaParam = params.get('area');
+
+    if (viewParam === 'spv' || tabParam === 'dashboard' || tabParam === 'roster' || tabParam === 'stickers') {
+      setCurrentView('spv');
+      if (tabParam === 'roster' || tabParam === 'stickers' || tabParam === 'dashboard') {
+        setSpvTab(tabParam);
+      }
+    } else if (areaParam) {
+      setCurrentView('crew');
     }
   }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800">
-      {/* Top Navigation */}
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+      {/* Top Header & View Switcher */}
+      <Navbar
+        currentView={currentView}
+        setCurrentView={setCurrentView}
+        spvTab={spvTab}
+        setSpvTab={setSpvTab}
+      />
 
-      {/* Main Content Area */}
-      <main className="flex-1 pb-16">
-        {activeTab === 'scan' && (
+      {/* Main Page Content */}
+      <main className="flex-1 pb-12">
+        {/* PAGE 1: DEDICATED CREW SUBMISSION PAGE */}
+        {currentView === 'crew' && (
           <CrewPiketFlow
-            onGoToDashboard={() => setActiveTab('dashboard')}
-            onGoToRoster={() => setActiveTab('roster')}
+            onGoToDashboard={() => {
+              setCurrentView('spv');
+              setSpvTab('dashboard');
+            }}
           />
         )}
 
-        {activeTab === 'roster' && <RosterManager />}
-
-        {activeTab === 'dashboard' && <SPVDashboard />}
-
-        {activeTab === 'stickers' && <QRStickerPrinter />}
+        {/* PAGE 2: DEDICATED SPV & MANAGEMENT PORTAL */}
+        {currentView === 'spv' && (
+          <div>
+            {spvTab === 'dashboard' && <SPVDashboard />}
+            {spvTab === 'roster' && <RosterManager />}
+            {spvTab === 'stickers' && <QRStickerPrinter />}
+          </div>
+        )}
       </main>
 
-      {/* Footer (Hidden when printing stickers) */}
-      <footer className="bg-white border-t border-slate-200 py-6 px-4 text-center text-xs text-slate-500 no-print">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="font-extrabold text-slate-800">Hara Chicken</span>
-            <span>•</span>
-            <span>Sistem Piket Kru Digital & Kepatuhan SOP</span>
-          </div>
-
-          <p className="text-slate-400">
-            Scan QR • AI Verification • Real-time Google Sheets Sync
+      {/* Clean Footer */}
+      <footer className="bg-white border-t border-slate-200 py-4 px-4 text-center text-[11px] text-slate-400 no-print">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+          <p className="font-semibold text-slate-600">
+            Piket Cihuy • Sistem Piket QR Code & Verifikasi AI
           </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setCurrentView(currentView === 'crew' ? 'spv' : 'crew')}
+              className="text-amber-800 hover:underline font-bold"
+            >
+              {currentView === 'crew' ? 'Buka Portal SPV' : 'Kembali ke Halaman Kru'}
+            </button>
+          </div>
         </div>
       </footer>
     </div>

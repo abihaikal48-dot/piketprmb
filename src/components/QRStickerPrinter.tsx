@@ -63,7 +63,7 @@ export const QRStickerPrinter: React.FC = () => {
             Cetak Stiker Fisik Outlet
           </span>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-            Stiker QR Code Titik Piket Hara Chicken
+            Stiker QR Code Titik Piket Cihuy
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-xl">
             Cetak stiker ini di kertas stiker label atau A4, lalu tempelkan di masing-masing titik area (Meja Fryer, Kasir, Dining, Toilet). Kru cukup memindai stiker dengan kamera HP untuk lapor piket.
@@ -139,11 +139,11 @@ export const QRStickerPrinter: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b-2 border-red-600 print:border-black">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-red-600 print:bg-black text-white flex items-center justify-center font-extrabold text-sm">
-                  H
+                  🍗
                 </div>
                 <div>
                   <h3 className="font-extrabold text-xs tracking-tight text-slate-900 uppercase">
-                    HARA CHICKEN
+                    PIKET CIHUY
                   </h3>
                   <span className="text-[10px] text-red-600 print:text-black font-bold tracking-wider uppercase block">
                     TITIK KONTROL PIKET
