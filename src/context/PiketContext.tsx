@@ -26,6 +26,12 @@ import {
   saveSpreadsheetInfo
 } from '../services/sheetsService';
 import { getCachedAccessToken } from '../services/authService';
+import { 
+  testFirestoreConnection, 
+  subscribeToPiketRecords, 
+  saveRecordToFirestore, 
+  updateRecordStatusInFirestore 
+} from '../services/firebaseService';
 
 interface PiketContextType {
   areas: PiketArea[];
@@ -36,6 +42,7 @@ interface PiketContextType {
   selectedArea: PiketArea | null;
   spreadsheetInfo: SpreadsheetInfo | null;
   isSheetsConnected: boolean;
+  isFirebaseConnected: boolean;
   googleUserEmail: string | null;
   selectAreaById: (areaId: string) => void;
   getAssignedCrewForArea: (areaId: string, shift?: ShiftType) => CrewMember | null;
@@ -117,6 +124,7 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Sheets state (supports webhook and OAuth)
   const [spreadsheetInfo, setSpreadsheetInfo] = useState<SpreadsheetInfo | null>(getSavedSpreadsheetInfo);
   const [googleUserEmail, setGoogleUserEmail] = useState<string | null>(null);
+  const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
 
   // Online Real-time Sync across all devices (Person A and Person B see identical state)
   const syncWithServer = async () => {
@@ -164,12 +172,40 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   useEffect(() => {
+    // 1. Test Firestore connection
+    testFirestoreConnection().then(connected => {
+      setIsFirebaseConnected(connected);
+    });
+
+    // 2. Real-time Firebase Firestore subscription
+    const unsubscribe = subscribeToPiketRecords((firestoreRecords) => {
+      if (firestoreRecords && firestoreRecords.length > 0) {
+        setIsFirebaseConnected(true);
+        setRecords(prev => {
+          const map = new Map<string, PiketRecord>();
+          firestoreRecords.forEach(r => {
+            if (r && r.id) map.set(r.id, r);
+          });
+          prev.forEach(r => {
+            if (r && r.id && !map.has(r.id)) {
+              map.set(r.id, r);
+            }
+          });
+          return Array.from(map.values()).sort(
+            (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          );
+        });
+      }
+    });
+
+    // 3. Background server sync backup
     syncWithServer();
-    // Poll every 4 seconds to sync submissions between phones and computers
-    const interval = setInterval(syncWithServer, 4000);
+    const interval = setInterval(syncWithServer, 5000);
     const onFocus = () => syncWithServer();
     window.addEventListener('focus', onFocus);
+
     return () => {
+      unsubscribe();
       clearInterval(interval);
       window.removeEventListener('focus', onFocus);
     };
@@ -269,7 +305,12 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setRecords(prev => [newRecord, ...prev]);
 
-    // Background server log
+    // 1. Real-time Firebase Firestore persistence
+    saveRecordToFirestore(newRecord).catch(err => {
+      console.warn('Firestore write warning, server persistence will handle it:', err);
+    });
+
+    // 2. Background server API log & disk persistence
     fetch('/api/piket/records', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -302,6 +343,12 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       })
     );
 
+    // 1. Firebase Firestore update
+    updateRecordStatusInFirestore(recordId, status, notes).catch(err => {
+      console.warn('Firestore update warning, server will handle it:', err);
+    });
+
+    // 2. Background server update
     fetch(`/api/piket/records/${recordId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -464,6 +511,7 @@ export const PiketProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         selectedArea,
         spreadsheetInfo,
         isSheetsConnected: !!spreadsheetInfo,
+        isFirebaseConnected,
         googleUserEmail,
         selectAreaById,
         getAssignedCrewForArea,

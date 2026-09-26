@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart3, ClipboardList, Printer, ArrowLeft, Lock, FileSpreadsheet } from 'lucide-react';
+import { BarChart3, CalendarDays, Printer, ArrowLeft, Lock, ExternalLink } from 'lucide-react';
 import { usePiket } from '../context/PiketContext';
 
 interface SPVHeaderProps {
@@ -9,66 +9,74 @@ interface SPVHeaderProps {
 }
 
 export const SPVHeader: React.FC<SPVHeaderProps> = ({ spvTab, setSpvTab, onExitSPV }) => {
-  const { isSheetsConnected, spreadsheetInfo } = usePiket();
+  const { isSheetsConnected, spreadsheetInfo, isFirebaseConnected } = usePiket();
 
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-2xs no-print">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-14">
+    <header className="bg-white/90 backdrop-blur-md border-b border-zinc-200/80 sticky top-0 z-30 no-print">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+        <div className="flex items-center justify-between h-15">
           {/* Brand & Portal Title */}
           <div className="flex items-center gap-3">
             <button
               onClick={onExitSPV}
-              className="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors"
+              className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-900 transition-colors py-1.5 pr-2 rounded-lg"
               title="Kembali ke Halaman Kirim Piket Kru"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Halaman Kru</span>
             </button>
 
-            <span className="text-slate-300">|</span>
+            <span className="text-zinc-200">|</span>
 
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-sm text-slate-900">Portal Kepala Outlet</span>
-              <span className="hidden sm:inline-block text-[11px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-                Ummu Sallaamah
-              </span>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-sm text-zinc-900 tracking-tight">Kepala Outlet</span>
+              <span className="text-xs text-zinc-500 hidden sm:inline">· Ummu Sallaamah</span>
             </div>
           </div>
 
           {/* Right Controls */}
           <div className="flex items-center gap-2">
+            {isFirebaseConnected && (
+              <div 
+                className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200/70"
+                title="Tersinkronisasi Realtime via Google Firebase"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                <span>Firebase Realtime</span>
+              </div>
+            )}
+
             {isSheetsConnected && spreadsheetInfo && (
               <a
                 href={spreadsheetInfo.url}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 transition-colors"
                 title="Buka Google Spreadsheet"
               >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="hidden sm:inline">Sheets</span>
+                <span>Google Sheets</span>
+                <ExternalLink className="w-3 h-3 text-emerald-600" />
               </a>
             )}
 
             <button
               onClick={onExitSPV}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 border border-slate-200 hover:bg-slate-50 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors cursor-pointer"
             >
-              <Lock className="w-3 h-3 text-slate-500" />
-              <span>Kunci</span>
+              <Lock className="w-3.5 h-3.5 text-zinc-400" />
+              <span>Kunci Akses</span>
             </button>
           </div>
         </div>
 
-        {/* SPV Sub-Tabs */}
-        <div className="flex space-x-1 border-t border-slate-100 py-1.5 overflow-x-auto scrollbar-none text-xs">
+        {/* Modern Segmented Navigation Tabs */}
+        <div className="flex items-center gap-1 pb-2.5 pt-0.5 overflow-x-auto scrollbar-none">
           <button
             onClick={() => setSpvTab('dashboard')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
               spvTab === 'dashboard'
-                ? 'bg-slate-900 text-white'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                ? 'bg-zinc-900 text-white shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
             }`}
           >
             <BarChart3 className="w-3.5 h-3.5" />
@@ -77,22 +85,22 @@ export const SPVHeader: React.FC<SPVHeaderProps> = ({ spvTab, setSpvTab, onExitS
 
           <button
             onClick={() => setSpvTab('roster')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
               spvTab === 'roster'
-                ? 'bg-slate-900 text-white'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                ? 'bg-zinc-900 text-white shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
             }`}
           >
-            <ClipboardList className="w-3.5 h-3.5" />
+            <CalendarDays className="w-3.5 h-3.5" />
             <span>Jadwal Piket</span>
           </button>
 
           <button
             onClick={() => setSpvTab('stickers')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
               spvTab === 'stickers'
-                ? 'bg-slate-900 text-white'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                ? 'bg-zinc-900 text-white shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
             }`}
           >
             <Printer className="w-3.5 h-3.5" />

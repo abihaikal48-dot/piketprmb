@@ -1,0 +1,99 @@
+{
+  "entities": {
+    "PiketRecord": {
+      "title": "PiketRecord",
+      "description": "Laporan hasil piket harian kru outlet Hara Chicken",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique record identifier"
+        },
+        "areaId": {
+          "type": "string",
+          "description": "ID area piket"
+        },
+        "areaName": {
+          "type": "string",
+          "description": "Nama area piket"
+        },
+        "areaCode": {
+          "type": "string",
+          "description": "Kode area piket"
+        },
+        "crewName": {
+          "type": "string",
+          "description": "Nama kru yang bertugas"
+        },
+        "shift": {
+          "type": "string",
+          "enum": ["PAGI", "MALAM"],
+          "description": "Shift piket"
+        },
+        "date": {
+          "type": "string",
+          "description": "Tanggal piket format YYYY-MM-DD"
+        },
+        "time": {
+          "type": "string",
+          "description": "Waktu submit HH:mm"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "ISO timestamp"
+        },
+        "photoUrl": {
+          "type": "string",
+          "description": "Data URI atau link bukti foto"
+        },
+        "spvStatus": {
+          "type": "string",
+          "enum": ["PENDING", "APPROVED", "REVISION_NEEDED"],
+          "description": "Status review Kepala Outlet"
+        },
+        "spvNotes": {
+          "type": "string",
+          "description": "Catatan Kepala Outlet (Ummu Sallaamah)"
+        },
+        "syncedToSheets": {
+          "type": "boolean",
+          "description": "Status sinkronisasi ke Google Sheets"
+        }
+      },
+      "required": ["id", "areaId", "areaName", "crewName", "shift", "date"]
+    },
+    "AppConfig": {
+      "title": "AppConfig",
+      "description": "Konfigurasi bersama seperti Webhook Google Sheets",
+      "type": "object",
+      "properties": {
+        "webhookUrl": {
+          "type": "string",
+          "description": "URL Google Apps Script Webhook"
+        },
+        "sheetUrl": {
+          "type": "string",
+          "description": "URL Google Sheets"
+        },
+        "title": {
+          "type": "string",
+          "description": "Judul spreadsheet"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Waktu konfigurasi diperbarui"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/piket_records/{recordId}": {
+      "schema": "PiketRecord",
+      "description": "Koleksi seluruh riwayat laporan piket kru Hara Chicken"
+    },
+    "/app_config/{configId}": {
+      "schema": "AppConfig",
+      "description": "Pengaturan bersama integrasi Google Sheets outlet"
+    }
+  }
+}

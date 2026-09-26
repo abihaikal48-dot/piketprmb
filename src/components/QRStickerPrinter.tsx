@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
-import { Printer, Download, QrCode, Globe, Info, Check } from 'lucide-react';
+import { Printer, Download, QrCode, Globe } from 'lucide-react';
 import { usePiket } from '../context/PiketContext';
 import { PiketArea } from '../types/piket';
 import { AreaIcon } from './AreaIcon';
@@ -14,20 +14,18 @@ export const QRStickerPrinter: React.FC = () => {
   });
 
   useEffect(() => {
-    // If running in browser and has origin, user can use current or vercel URL
     const generateAllQrs = async () => {
       const generated: Record<string, string> = {};
       const cleanBase = baseUrl.trim().replace(/\/+$/, '');
 
       for (const area of areas) {
-        // Direct link that opens app with that area pre-selected
         const targetUrl = `${cleanBase}/?area=${area.id}`;
         try {
           const url = await QRCode.toDataURL(targetUrl, {
-            width: 320,
+            width: 360,
             margin: 2,
             color: {
-              dark: '#000000',
+              dark: '#18181b',
               light: '#ffffff',
             },
             errorCorrectionLevel: 'H',
@@ -53,91 +51,91 @@ export const QRStickerPrinter: React.FC = () => {
 
     const link = document.createElement('a');
     link.href = dataUrl;
-    link.download = `QR_Stiker_PiketCihuy_${area.code}.png`;
+    link.download = `QR_Stiker_HaraChicken_${area.code}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-5 sm:py-6 space-y-4">
+    <div className="max-w-5xl mx-auto px-4 py-6 sm:py-8 space-y-6">
       {/* Control bar (No Print) */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 no-print">
+      <div className="bg-white rounded-2xl p-6 border border-zinc-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
         <div>
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+          <span className="text-xs text-zinc-500 font-medium block mb-1">
             Stiker Fisik Outlet
           </span>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight mt-0.5">
-            Cetak Stiker QR Piket Cihuy
+          <h1 className="text-xl sm:text-2xl font-semibold text-zinc-900 tracking-tight">
+            Cetak Stiker QR Area Piket
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Stiker untuk ditempel di tiap titik meja/area piket. Kru scan langsung dengan kamera HP.
+          <p className="text-xs sm:text-sm text-zinc-500 mt-1 max-w-md">
+            Cetak dan tempel stiker ini di 6 titik meja atau area outlet. Kru cukup scan dengan kamera HP untuk lapor piket.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           {/* Sticker Size Options */}
-          <div className="flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-xs">
+          <div className="flex rounded-xl border border-zinc-200 p-0.5 bg-zinc-50 text-xs">
             <button
               onClick={() => setStickerSize('compact')}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
-                stickerSize === 'compact' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
+                stickerSize === 'compact' ? 'bg-zinc-900 text-white shadow-xs' : 'text-zinc-600 hover:text-zinc-900'
               }`}
             >
-              6x6 cm
+              6×6 cm
             </button>
             <button
               onClick={() => setStickerSize('standard')}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
-                stickerSize === 'standard' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
+                stickerSize === 'standard' ? 'bg-zinc-900 text-white shadow-xs' : 'text-zinc-600 hover:text-zinc-900'
               }`}
             >
-              8x8 cm
+              8×8 cm
             </button>
             <button
               onClick={() => setStickerSize('large')}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
-                stickerSize === 'large' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
+                stickerSize === 'large' ? 'bg-zinc-900 text-white shadow-xs' : 'text-zinc-600 hover:text-zinc-900'
               }`}
             >
-              10x10 cm
+              10×10 cm
             </button>
           </div>
 
           <button
             onClick={handlePrint}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors shadow-2xs cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs transition-colors shadow-xs cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
-            <span>Cetak (Print)</span>
+            <span>Cetak Stiker</span>
           </button>
         </div>
       </div>
 
       {/* Target URL Bar */}
-      <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-2 no-print text-xs">
-        <div className="flex items-center gap-2 flex-1 min-w-[240px]">
-          <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-          <span className="text-slate-500 font-medium shrink-0">Link QR:</span>
+      <div className="bg-white rounded-2xl p-4 border border-zinc-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3 no-print text-xs">
+        <div className="flex items-center gap-2 flex-1 min-w-[260px]">
+          <Globe className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+          <span className="text-zinc-500 font-medium shrink-0">Alamat Web:</span>
           <input
             type="text"
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
             placeholder="https://piket-cihuy.vercel.app"
-            className="w-full text-xs font-mono font-semibold px-2 py-1 rounded bg-slate-50 border border-slate-200 text-slate-800"
+            className="w-full text-xs font-mono px-3 py-1.5 rounded-xl bg-zinc-50 border border-zinc-200 text-zinc-800 focus:outline-hidden focus:border-zinc-400"
           />
         </div>
         <button
           onClick={() => setBaseUrl(window.location.origin)}
-          className="text-[11px] text-slate-500 hover:text-slate-800 underline"
+          className="text-xs text-zinc-500 hover:text-zinc-900 font-medium underline cursor-pointer"
         >
           Gunakan URL saat ini
         </button>
       </div>
 
-      {/* STICKER PRINT GRID (Clean, modern, crisp, no emojis) */}
+      {/* STICKER PRINT GRID (Simple, Modern, Clean) */}
       <div
-        className={`grid gap-4 ${
+        className={`grid gap-4.5 ${
           stickerSize === 'compact'
             ? 'grid-cols-2 sm:grid-cols-3'
             : stickerSize === 'large'
@@ -148,38 +146,39 @@ export const QRStickerPrinter: React.FC = () => {
         {areas.map((area) => (
           <div
             key={area.id}
-            className="bg-white rounded-2xl overflow-hidden border border-slate-300 print:border-black p-4 flex flex-col justify-between shadow-2xs print:shadow-none print:break-inside-avoid relative"
+            className="bg-white rounded-2xl overflow-hidden border border-zinc-300 print:border-zinc-900 p-5 flex flex-col justify-between shadow-xs print:shadow-none print:break-inside-avoid relative"
           >
             {/* Header */}
-            <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 print:border-black">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-200 print:border-zinc-900">
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md bg-slate-900 print:bg-black text-white flex items-center justify-center font-bold text-xs">
-                  PC
+                <div className="w-7 h-7 rounded-lg bg-zinc-950 text-white flex items-center justify-center font-bold text-xs">
+                  HC
                 </div>
                 <div>
-                  <h3 className="font-bold text-xs tracking-tight text-slate-900">
-                    PIKET CIHUY
+                  <h3 className="font-semibold text-xs text-zinc-900 tracking-tight">
+                    HARA CHICKEN
                   </h3>
+                  <p className="text-[10px] text-zinc-400">Piket Kebersihan</p>
                 </div>
               </div>
 
-              <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 print:bg-slate-200 text-slate-800 border border-slate-200">
+              <span className="font-mono text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-zinc-100 text-zinc-800 border border-zinc-200">
                 {area.code}
               </span>
             </div>
 
             {/* Area Name & Icon */}
-            <div className="text-center my-2">
-              <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center mx-auto text-slate-700 mb-1">
+            <div className="text-center my-3">
+              <div className="w-8 h-8 rounded-xl bg-zinc-50 border border-zinc-200 flex items-center justify-center mx-auto text-zinc-700 mb-2">
                 <AreaIcon categoryOrId={area.id} className="w-4 h-4" />
               </div>
-              <h2 className="text-sm font-bold text-slate-900 leading-tight">
+              <h2 className="text-sm font-semibold text-zinc-900 leading-snug">
                 {area.name}
               </h2>
             </div>
 
             {/* QR Code */}
-            <div className="bg-white p-2 rounded-xl border border-slate-200 print:border-black flex flex-col items-center justify-center mx-auto my-1">
+            <div className="bg-white p-2.5 rounded-2xl border border-zinc-200 print:border-zinc-800 flex flex-col items-center justify-center mx-auto my-1">
               {qrDataUrls[area.id] ? (
                 <img
                   src={qrDataUrls[area.id]}
@@ -193,30 +192,23 @@ export const QRStickerPrinter: React.FC = () => {
                   } object-contain`}
                 />
               ) : (
-                <div className="w-36 h-36 flex items-center justify-center text-slate-400">
+                <div className="w-36 h-36 flex items-center justify-center text-zinc-400">
                   <QrCode className="w-8 h-8 animate-pulse" />
                 </div>
               )}
-              <span className="text-[9px] font-mono text-slate-500 font-bold mt-1">
-                SCAN DENGAN KAMERA HP
-              </span>
-            </div>
-
-            {/* Bottom Slogan */}
-            <div className="mt-2 pt-2 border-t border-slate-100 text-center">
-              <span className="text-[10px] font-semibold text-slate-600">
-                Kebersihan Terjaga, Piket Cihuy!
+              <span className="text-[9px] font-mono text-zinc-400 font-medium mt-1.5 tracking-wider uppercase">
+                Scan dengan Kamera HP
               </span>
             </div>
 
             {/* Non-print action */}
-            <div className="mt-2 pt-1 flex items-center justify-end no-print">
+            <div className="mt-3 pt-2 border-t border-zinc-100 flex items-center justify-end no-print">
               <button
                 onClick={() => handleDownloadSingleQR(area)}
-                className="text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-1 font-medium"
+                className="text-xs text-zinc-500 hover:text-zinc-900 flex items-center gap-1 font-medium transition-colors cursor-pointer"
               >
                 <Download className="w-3 h-3" />
-                <span>Simpan PNG</span>
+                <span>Download PNG</span>
               </button>
             </div>
           </div>

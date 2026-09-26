@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global safety catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Koleksi Laporan Piket Hara Chicken
+    match /piket_records/{recordId} {
+      allow read: if true;
+      allow create: if isValidId(recordId)
+        && request.resource.data.keys().hasAll(['id', 'areaId', 'areaName', 'crewName', 'shift', 'date'])
+        && request.resource.data.id is string && request.resource.data.id.size() <= 128
+        && request.resource.data.areaId is string && request.resource.data.areaId.size() <= 64
+        && request.resource.data.areaName is string && request.resource.data.areaName.size() <= 200
+        && request.resource.data.crewName is string && request.resource.data.crewName.size() <= 100
+        && request.resource.data.shift in ['PAGI', 'MALAM'];
+      allow update: if isValidId(recordId)
+        && (
+          // Kepala Outlet mengupdate status evaluasi & catatan
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['spvStatus', 'spvNotes', 'syncedToSheets', 'updatedAt']) ||
+          // Update status sinkronisasi ke spreadsheet
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['syncedToSheets'])
+        );
+      allow delete: if false;
+    }
+
+    // Koleksi Pengaturan Bersama (misal Webhook Google Sheets)
+    match /app_config/{configId} {
+      allow read: if true;
+      allow write: if isValidId(configId)
+        && request.resource.data.size() <= 10;
+    }
+  }
+}

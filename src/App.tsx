@@ -65,13 +65,13 @@ function MainApp() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800">
+    <div className="min-h-screen bg-zinc-50/70 flex flex-col font-sans text-zinc-900 selection:bg-zinc-900 selection:text-white">
       {/* 1. SEPARATED PAGE: CREW PIKET SUBMISSION PAGE */}
       {currentPage === 'crew' && (
         <>
           <CrewHeader onOpenSPV={() => handleOpenSPV('dashboard')} />
 
-          <main className="flex-1 pb-10">
+          <main className="flex-1 pb-12">
             <CrewPiketFlow
               onGoToDashboard={() => handleOpenSPV('dashboard')}
               onGoToRoster={() => handleOpenSPV('roster')}
@@ -79,14 +79,14 @@ function MainApp() {
           </main>
 
           {/* Minimalist Crew Footer */}
-          <footer className="bg-white border-t border-slate-200 py-3.5 px-4 text-center text-xs text-slate-400 no-print">
-            <div className="max-w-3xl mx-auto flex items-center justify-between text-[11px]">
-              <span>Hara Chicken • Sistem Piket Kru</span>
+          <footer className="bg-white/80 border-t border-zinc-200/80 py-4 px-4 text-xs text-zinc-400 no-print">
+            <div className="max-w-4xl mx-auto flex items-center justify-between text-[11px]">
+              <span className="font-normal text-zinc-500">Hara Chicken · Sistem Piket Kebersihan Outlet</span>
               <button
                 onClick={() => handleOpenSPV('dashboard')}
-                className="hover:text-slate-700 flex items-center gap-1 font-medium"
+                className="hover:text-zinc-900 flex items-center gap-1.5 font-medium transition-colors cursor-pointer text-zinc-600"
               >
-                <Lock className="w-3 h-3 text-slate-400" />
+                <Lock className="w-3 h-3 text-zinc-400" />
                 <span>Portal Kepala Outlet</span>
               </button>
             </div>
@@ -103,21 +103,21 @@ function MainApp() {
             onExitSPV={handleExitSPV}
           />
 
-          <main className="flex-1 pb-12">
+          <main className="flex-1 pb-14">
             {spvTab === 'dashboard' && <SPVDashboard onLockSPV={handleExitSPV} />}
             {spvTab === 'roster' && <RosterManager />}
             {spvTab === 'stickers' && <QRStickerPrinter />}
           </main>
 
           {/* Kepala Outlet Portal Footer */}
-          <footer className="bg-white border-t border-slate-200 py-4 px-4 text-center text-xs text-slate-500 no-print">
-            <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-              <span className="font-semibold text-slate-700">
-                Portal Kepala Outlet Hara Chicken • Ummu Sallaamah
+          <footer className="bg-white/80 border-t border-zinc-200/80 py-4 px-4 text-xs text-zinc-500 no-print">
+            <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px]">
+              <span className="font-medium text-zinc-600">
+                Portal Kepala Outlet Hara Chicken · Ummu Sallaamah
               </span>
               <button
                 onClick={handleExitSPV}
-                className="text-slate-500 hover:text-slate-800 underline text-[11px]"
+                className="text-zinc-500 hover:text-zinc-900 transition-colors cursor-pointer"
               >
                 Kembali ke Halaman Kru
               </button>

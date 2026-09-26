@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, Lock, Sparkles } from 'lucide-react';
+import { Clock, Lock, Sparkles, ChevronDown } from 'lucide-react';
 import { usePiket } from '../context/PiketContext';
 import { ShiftType } from '../types/piket';
 
@@ -18,18 +18,23 @@ export const CrewHeader: React.FC<CrewHeaderProps> = ({ onOpenSPV }) => {
     setActiveShift(nextShift);
   };
 
+  const isPagi = activeShift.includes('Pagi');
+
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-2xs no-print">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-14">
+    <header className="bg-white/80 backdrop-blur-md border-b border-zinc-200/80 sticky top-0 z-30 no-print transition-colors">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6">
+        <div className="flex items-center justify-between h-15">
           {/* Brand Logo & Name */}
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-white font-bold text-sm tracking-tight shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-zinc-950 flex items-center justify-center text-white font-bold text-xs tracking-tight shadow-xs">
               HC
             </div>
             <div>
-              <span className="font-bold text-base text-slate-900 tracking-tight">Hara Chicken</span>
-              <p className="text-[10px] text-slate-500 font-medium">Piket Kru Outlet</p>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-sm text-zinc-900 tracking-tight">Hara Chicken</span>
+                <span className="text-[10px] text-zinc-400 font-medium hidden sm:inline">· Outlet Piket</span>
+              </div>
+              <p className="text-[11px] text-zinc-500 font-normal">Sistem Monitoring Kebersihan</p>
             </div>
           </div>
 
@@ -37,18 +42,19 @@ export const CrewHeader: React.FC<CrewHeaderProps> = ({ onOpenSPV }) => {
           <div className="flex items-center gap-2">
             <button
               onClick={toggleShift}
-              title="Ganti Shift Aktif"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors border border-slate-200"
+              title="Klik untuk beralih Shift"
+              className="group flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-100/80 hover:bg-zinc-200/80 text-zinc-700 transition-colors cursor-pointer"
             >
-              <Clock className="w-3.5 h-3.5 text-slate-500" />
-              <span>{activeShift.split(' ')[0]}</span>
+              <Clock className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-900 transition-colors" />
+              <span>Shift {isPagi ? 'Pagi' : 'Sore / Closing'}</span>
+              <ChevronDown className="w-3 h-3 text-zinc-400" />
             </button>
 
             <button
               onClick={onOpenSPV}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-colors cursor-pointer shadow-2xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-white transition-all shadow-xs active:scale-98 cursor-pointer"
             >
-              <Lock className="w-3 h-3 text-slate-300" />
+              <Lock className="w-3 h-3 text-zinc-300" />
               <span>Kepala Outlet</span>
             </button>
           </div>
